@@ -802,7 +802,7 @@ function stranka(array $prilezitosti, array $cfg, bool $web = false, ?array $upr
     $od = $prilezitosti ? $prilezitosti[0]['datum']->format('j. n. Y') : '';
     $uvod = '<h1>Bohoslužba slova</h1>' . ($formular ?? '') . '<nav><ol>' . implode('', $obsah) . '</ol></nav>'
         . '<p class="legenda"><b>Misál:</b> <a href="' . h($zakladni) . '">' . h($zakladni) . '</a>, <b>kalendář:</b> <a href="' . h($zakladni . 'kalendar.htm') . '">' . h($zakladni . 'kalendar.htm') . '</a></p>'
-        . ' ' . $legend;
+        . ' ' . '<p class="legenda"><b>Zkratky:</b> <b>P</b> = předsedající (Vlasta nebo Honza, jsou-li přítomni, jinak jiný pověřený), <b>Ž</b> = žalmista (Honza nebo varhanice Lenka), <b>L</b> = lektor, <b>Vš</b> = všichni. Kurzívou jsou řádky, které se nečtou nahlas (pokyny a poznámky). Varianta A platí, když nejsou přítomni ani Vlasta, ani Honza; varianta B, když vede Vlasta nebo Honza.</p>';
     return "<!doctype html>\n<html lang=\"cs\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Bohoslužba slova od $od</title>\n<style>" . CSS . "</style>\n</head>\n<body>\n$uvod\n" . implode("\n", $casti) . "\n</body>\n</html>\n";
 }
 

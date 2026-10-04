@@ -94,5 +94,17 @@ jeRovno('korejs: 27. neděle A', korejsOdkaz('Žl 80 (79), 9+12.13-14.15-16.19-2
 jeRovno('korejs: 1. adventní B', korejsOdkaz('Žl 80 (79), 2ac+3b.15-16.18-19', 'B', '1. neděle adventní', $kc), __DIR__ . '/test/korejs/zalmy/TestPs080_03.pdf');
 jeRovno('korejs: 4. adventní C', korejsOdkaz('Žl 80 (79), 2ac+3b.15-16.18-19', 'C', '4. neděle adventní', $kc), __DIR__ . '/test/korejs/zalmy/TestPs080_03c.pdf');
 jeRovno('korejs: nic k žalmu', korejsOdkaz('Iz 25,6-10a', 'A', '27. neděle v mezidobí', $kc), null);
+// Více bohoslužeb najednou (web i CLI) se vykreslí bez varování a chyb
+set_error_handler(function (int $no, string $str) { throw new ErrorException($str, 0, $no); });
+$vice = [];
+foreach (['2026-10-04', '2026-10-11', '2026-10-18', '2026-10-25'] as $dd) {
+    $pp = popisDne($d($dd), $kc + ['_vsedni' => ['nanebevstoupeni', 'bozi_telo']]);
+    if ($pp !== null) { $pp['datum'] = $d($dd); $vice[] = $pp; }
+}
+$html = stranka($vice, $kc, true);
+$html2 = stranka($vice, $kc, false, null, null);
+restore_error_handler();
+jeRovno('více bohoslužeb: počet krabiček', substr_count($html, 'class="krabice nezobrazovat"'), count($vice));
+jeRovno('více bohoslužeb: legenda', substr_count($html2, 'Zkratky:'), 1);
 echo "Hotovo: $ok v pořádku, $chyb chyb.\n";
 exit($chyb ? 1 : 0);
