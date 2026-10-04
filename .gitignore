@@ -1,0 +1,5 @@
+# stažené stránky z liturgie.cz (texty © ČBK, nesmí do repozitáře)
+cache/
+# vygenerované výstupy
+*.html
+.DS_Store
