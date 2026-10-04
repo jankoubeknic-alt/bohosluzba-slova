@@ -3,10 +3,9 @@ declare(strict_types=1);
 /**
  * Generátor Bohoslužby slova: jediný soubor, vše nastavitelné hned níže.
  *
- *   Web:  bohosluzba.php                      (formulář s přepínači + výstup)
- *         bohosluzba.php?od=2026-10-05&pocet=4
- *         bohosluzba.php?den=2026-11-01       (jen jeden den)
- *   CLI:  php bohosluzba.php --od=2026-10-05 --pocet=4 --vystup=bohosluzby.html
+ *   Web:  bohosluzba.php                      (výběr dne v kalendáři + výstup)
+ *         bohosluzba.php?den=2026-10-18
+ *   CLI:  php bohosluzba.php --den=2026-10-18 --vystup=bohosluzba.html
  *
  * Přepínače lze změnit tady, nebo ve webovém formuláři / v adrese (adresa má přednost).
  */
@@ -21,7 +20,6 @@ $CFG = [
     'korejs' => 'https://sdh.cz/korejs/',    // tabulka žalmů s nápěvy (Korejs); generátor jen odkazuje na PDF, nic nekopíruje
 
     // ---- PŘEPÍNAČE ----
-    'pocet' => 4,                            // kolik dalších příležitostí vypsat
     'nanebevstoupeni' => 'ctvrtek',          // 'ctvrtek' (všední den) nebo 'nedele' (přeneseno na neděli)
     'bozi_telo' => 'ctvrtek',                // 'ctvrtek' nebo 'nedele'
     'slavnosti_ve_vsedni_den' => true,       // true = nabízet i slavnosti ve všední dny; false = jen neděle
@@ -740,9 +738,9 @@ function radkyZaver(): array
 }
 
 /** Jedna bohoslužba (bez <html> obalu). */
-function bohosluzbaHtml(array $p, array $t, bool $zalomit): string
+function bohosluzbaHtml(array $p, array $t): string
 {
-    $hlava = '<header id="text-' . $p['datum']->format('Y-m-d') . '"' . ($zalomit ? ' class="nova-strana"' : '') . '><h2>' . h($p['nazev']) . '</h2>'
+    $hlava = '<header id="text"><h2>' . h($p['nazev']) . '</h2>'
         . '<p class="datum">' . h(cesDatum($p['datum'])) . ' · liturgický rok ' . h($p['rok']) . '</p>';
     $hlava .= '<p class="zdroj">Zdroj textů: <a href="' . h((string)$t['zdroj_url']) . '">' . h((string)$t['zdroj_url']) . '</a> (Český misál a Mešní lekcionář, © ČBK; vybráno podle roku ' . h($p['rok']) . ').</p>';
     if ($t['chyby']) {
@@ -778,44 +776,38 @@ th, td { border: 1px solid #000; padding: 3pt 5pt; vertical-align: top; width: 5
 th { text-align: left; }
 tr { break-inside: avoid; }
 tr.pokyn td { text-align: center; font-style: italic; }
-.nova-strana { break-before: page; }
 form.nastaveni { border: 1px solid #000; padding: 4pt 6pt; margin: 0 0 8pt; font-size: 10pt; }
-nav ol { margin: 0 0 8pt; padding-left: 16pt; }
 form.nastaveni .radek { margin: 3pt 0; }
 a.tlacitko { display: inline-block; border: 1px solid #000; padding: 1pt 6pt; text-decoration: none; color: #000; }
 .krabice { border: 1px solid #000; padding: 6pt 8pt; margin: 8pt 0; font-size: 10pt; }
 .krabice h2 { font-size: 12pt; margin: 0 0 4pt; }
-nav.bocni li { margin: 3pt 0; }
-.krabice, header[id] { scroll-margin-top: 10px; }
-@media screen and (min-width: 1100px) {
-  body { max-width: none; padding-left: 250px; }
-  nav.bocni { position: fixed; left: 8px; top: 8px; width: 230px; max-height: calc(100vh - 16px); overflow-y: auto; border-right: 1px solid #bbb; padding-right: 6px; }
-  nav.bocni ol { padding-left: 0; list-style: none; }
-}
-@media print { form.nastaveni { display: none; } .nezobrazovat, nav { display: none; } body { padding: 0; max-width: none; } a { color: #000; text-decoration: none; } }
+@media print { form.nastaveni { display: none; } .nezobrazovat { display: none; } body { padding: 0; max-width: none; } a { color: #000; text-decoration: none; } }
 CSS;
 
-function stranka(array $prilezitosti, array $cfg, bool $web = false, ?array $upravy = null, ?string $formular = null): string
+function stranka(array $p, array $cfg, bool $web = false, ?array $upravy = null, ?string $formular = null): string
 {
-    $casti = []; $obsah = [];
+    $t = uplatniUpravy(nactiTexty($p, $cfg), $upravy['texty'] ?? []);
+    $t['zalm_cislo'] = zalmCislo($t['zalm']['citace'] ?? '');
+    $t['korejs'] = $t['zalm_cislo'] !== '' ? korejsOdkaz($t['zalm']['citace'], $p['rok'], $p['nazev'], $cfg) : null;
     $zakladni = preg_match('~^https?://~', $cfg['zdroj']) ? rtrim($cfg['zdroj'], '/') . '/' : 'https://m.liturgie.cz/misal/';
-    foreach ($prilezitosti as $i => $p) {
-        $t = uplatniUpravy(nactiTexty($p, $cfg), $upravy['texty'] ?? []);
-        $t['zalm_cislo'] = zalmCislo($t['zalm']['citace'] ?? '');
-        $t['korejs'] = $t['zalm_cislo'] !== '' ? korejsOdkaz($t['zalm']['citace'], $p['rok'], $p['nazev'], $cfg) : null;
-        $obsah[] = '<li><a href="#mse-' . h($p['datum']->format('Y-m-d')) . '">' . h(cesDatum($p['datum'])) . ': ' . h($p['nazev']) . '</a></li>';
-        $casti[] = krabiceMse($p, $t, $web, $upravy, $cfg) . bohosluzbaHtml($p, $t, $i > 0);
-    }
-    $od = $prilezitosti ? $prilezitosti[0]['datum']->format('j. n. Y') : '';
-    $uvod = '<h1>Bohoslužba slova</h1>' . ($formular ?? '') . '<nav class="bocni"><ol>' . implode('', $obsah) . '</ol></nav>'
+    $nadpis = 'Bohoslužba slova ' . cesDatum($p['datum']);
+    $uvod = '<h1>' . h($nadpis) . '</h1>' . ($formular ?? '')
         . '<p class="legenda"><b>Misál:</b> <a href="' . h($zakladni) . '">' . h($zakladni) . '</a>, <b>kalendář:</b> <a href="' . h($zakladni . 'kalendar.htm') . '">' . h($zakladni . 'kalendar.htm') . '</a></p>'
         . ' ' . '<p class="legenda"><b>Zkratky:</b> <b>P</b> = předsedající (Vlasta nebo Honza, jsou-li přítomni, jinak jiný pověřený), <b>Ž</b> = žalmista (Honza nebo varhanice Lenka), <b>L</b> = lektor, <b>Vš</b> = všichni. Kurzívou jsou řádky, které se nečtou nahlas (pokyny a poznámky). Varianta A platí, když nejsou přítomni ani Vlasta, ani Honza; varianta B, když vede Vlasta nebo Honza.</p>';
-    return "<!doctype html>\n<html lang=\"cs\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Bohoslužba slova od $od</title>\n<style>" . CSS . "</style>\n</head>\n<body>\n$uvod\n" . implode("\n", $casti) . "\n</body>\n</html>\n";
+    return "<!doctype html>\n<html lang=\"cs\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>" . h($nadpis) . "</title>\n<style>" . CSS . "</style>\n</head>\n<body>\n$uvod\n"
+        . krabiceMse($p, $t, $web, $upravy, $cfg) . "\n" . bohosluzbaHtml($p, $t) . "\n</body>\n</html>\n";
+}
+
+/** Přepínače formuláře jako část adresy, aby kontrola a odeslání běžely se stejným nastavením. */
+function nastaveniUrl(array $cfg): string
+{
+    return 'forma=1&nanebevstoupeni=' . $cfg['nanebevstoupeni'] . '&bozi_telo=' . $cfg['bozi_telo']
+        . ($cfg['slavnosti_ve_vsedni_den'] ? '&vsedni=1' : '');
 }
 
 /**
- * Krabička jedné bohoslužby: zdroj, kontrola (jen web), žalm s odkazem na Korejs a tisk.
- * Tisk se zpřístupní až po zaškrtnutí všech částí této bohoslužby (odeslaná kontrola).
+ * Krabička bohoslužby: zdroj, kontrola (jen web), žalm s odkazem na Korejs a tisk.
+ * Tisk se zpřístupní až po zaškrtnutí všech částí (odeslaná kontrola).
  */
 function krabiceMse(array $p, array $t, bool $web, ?array $upravy, array $cfg): string
 {
@@ -828,12 +820,11 @@ function krabiceMse(array $p, array $t, bool $web, ?array $upravy, array $cfg): 
         $tisk = $nove === [];
         $stav = '<p><b>Kontrola:</b> ručně upraveno: ' . h($ruc ? implode(', ', $ruc) : 'nic') . '. Neověřeno (nezaškrtnuto): ' . h($nove ? implode(', ', $nove) : 'nic') . '.</p>';
     }
-    $datum = $p['datum']->format('Y-m-d');
     $r = ['<p><b>' . h(cesDatum($p['datum'])) . ': ' . h($p['nazev']) . '</b></p>'];
-    if ($web) { $r[] = '<p><b>Tisk bude dostupný až po kontrole této bohoslužby.</b></p>'; }
+    if ($web) { $r[] = '<p><b>Tisk bude dostupný až po kontrole textů.</b></p>'; }
     $zdroj = '<a href="' . h((string)$t['zdroj_url']) . '" target="_blank" rel="noopener">' . h((string)$t['zdroj_url']) . '</a>';
     $r[] = '<p>Zdroj textů: ' . $zdroj . (!empty($p['pasije']) ? ' (včetně pašijí, evangelium v ročním cyklu A/B/C)' : '') . '</p>';
-    if ($web) { $r[] = '<p><a class="tlacitko" href="?uprava=' . h($datum) . '">Zkontrolovat texty</a></p>'; }
+    if ($web) { $r[] = '<p><a class="tlacitko" href="' . h('?uprava=' . $datum . '&' . nastaveniUrl($cfg)) . '">Zkontrolovat texty</a></p>'; }
     if ($t['zalm_cislo'] !== '') {
         $zalm = '<p>Žalm ' . h($t['zalm_cislo']) . ' – zpívá Honza nebo varhanice Lenka. ';
         $zalm .= $t['korejs'] !== null
@@ -843,7 +834,7 @@ function krabiceMse(array $p, array $t, bool $web, ?array $upravy, array $cfg): 
     }
     $r[] = $stav;
     if ($web) { $r[] = '<p><button type="button" onclick="window.print()"' . ($tisk ? '' : ' disabled') . '>Tisk / PDF</button>' . ($tisk ? '' : ' (zpřístupní se po zaškrtnutí všech částí)') . '</p>'; }
-    return '<div class="krabice nezobrazovat" id="mse-' . $datum . '">' . implode('', $r) . '<p><a href="#text-' . $datum . '">↓ Na text bohoslužby</a></p></div>';
+    return '<div class="krabice nezobrazovat" id="kontrola">' . implode('', $r) . '<p><a href="#text">↓ Na text bohoslužby</a></p></div>';
 }
 
 // ======================= KONTROLA A VLASTNÍ TEXTY =======================
@@ -944,20 +935,19 @@ function upravaStranka(DateTimeImmutable $d, array $cfg): string
     return "<!doctype html>\n<html lang=\"cs\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Kontrola textů $datum</title>\n<style>" . CSS . UPRAVA_CSS . "</style>\n</head>\n<body>\n"
         . '<h1>Kontrola textů: ' . h(cesDatum($d)) . '</h1><p class="datum">' . h($p['nazev']) . ' · liturgický rok ' . h($p['rok']) . '</p>'
         . '<p class="zdroj">Zdroj: <a href="' . h((string)$t['zdroj_url']) . '" target="_blank" rel="noopener">' . h((string)$t['zdroj_url']) . '</a>. Porovnejte každou část se zdrojem. Co sedí, zaškrtněte. Co nesedí, napište do políčka „Vlastní text“. Texty se nikam neukládají, použijí se jen v bohoslužbě, kterou tlačítkem vytvoříte.</p>'
-        . '<form method="post" action="?den=' . h($datum) . '"><p><button type="button" onclick="document.querySelectorAll(\'form input[type=checkbox]\').forEach(function(c){c.checked=true;})">Všechno sedí</button></p>' . $casti
-        . '<p><button>Vytvořit bohoslužbu s těmito texty (k tisku)</button> <a href="?den=' . h($datum) . '">Bohoslužbu bez úprav</a></p></form>'
+        . '<form method="post" action="' . h('?den=' . $datum . '&' . nastaveniUrl($cfg)) . '"><p><button type="button" onclick="document.querySelectorAll(\'form input[type=checkbox]\').forEach(function(c){c.checked=true;})">Všechno sedí</button></p>' . $casti
+        . '<p><button>Vytvořit bohoslužbu s těmito texty (k tisku)</button> <a href="' . h('?den=' . $datum . '&' . nastaveniUrl($cfg)) . '">Bohoslužbu bez úprav</a></p></form>'
         . "\n</body>\n</html>\n";
 }
 
 // ======================= SPUŠTĚNÍ =======================
 /** Webový formulář s přepínači (při tisku se skryje). */
-function formular(array $cfg, string $od): string
+function formular(array $cfg, string $den): string
 {
     $sel = fn(string $k, string $h) => $cfg[$k] === $h ? ' selected' : '';
     return '<form method="get" class="nastaveni"><input type="hidden" name="forma" value="1">'
         . '<p><b>Nastavení</b></p>'
-        . '<div class="radek">od <input type="date" name="od" value="' . h($od) . '"></div>'
-        . '<div class="radek">počet <input type="number" name="pocet" min="1" max="20" value="' . (int)$cfg['pocet'] . '"></div>'
+        . '<div class="radek">Den bohoslužby <input type="date" name="den" value="' . h($den) . '"></div>'
         . '<div class="radek">Nanebevstoupení <select name="nanebevstoupeni"><option value="ctvrtek"' . $sel('nanebevstoupeni', 'ctvrtek') . '>ve čtvrtek</option><option value="nedele"' . $sel('nanebevstoupeni', 'nedele') . '>v neděli</option></select></div>'
         . '<div class="radek">Boží Tělo <select name="bozi_telo"><option value="ctvrtek"' . $sel('bozi_telo', 'ctvrtek') . '>ve čtvrtek</option><option value="nedele"' . $sel('bozi_telo', 'nedele') . '>v neděli</option></select></div>'
         . '<div class="radek"><label><input type="checkbox" name="vsedni" value="1"' . ($cfg['slavnosti_ve_vsedni_den'] ? ' checked' : '') . '> slavnosti i ve všední dny</label></div>'
@@ -974,7 +964,6 @@ function bsHlavni(array $CFG): void
     else { foreach (array_slice($GLOBALS['argv'], 1) as $a) { if (preg_match('~^--([a-z_]+)=(.*)$~', $a, $m)) { $arg[$m[1]] = $m[2]; } } }
 
     // Přepínače z adresy / formuláře mají přednost před nastavením v souboru
-    if (isset($arg['pocet'])) { $cfg['pocet'] = max(1, min(20, (int)$arg['pocet'])); }
     foreach (['nanebevstoupeni', 'bozi_telo'] as $k) {
         if (isset($arg[$k]) && in_array($arg[$k], ['ctvrtek', 'nedele'], true)) { $cfg[$k] = $arg[$k]; }
     }
@@ -989,25 +978,25 @@ function bsHlavni(array $CFG): void
         echo upravaStranka($d, $cfg);
         return;
     }
-    $upravy = null;
+    $upravy = null; $den = null;
     try {
-        $odDatum = isset($arg['od']) && $platne($arg['od'])
-            ? new DateTimeImmutable($arg['od'])
-            : new DateTimeImmutable($cfg['vcetne_dnes'] ? 'today' : 'tomorrow');
-        if (isset($arg['den']) && $platne($arg['den'])) {
-            $d = new DateTimeImmutable($arg['den']);
-            $p = popisDne($d, $cfg + ['_vsedni' => ['nanebevstoupeni', 'bozi_telo']]);
-            if ($p === null) { throw new RuntimeException('Tento den není nedělí ani nastavenou slavností.'); }
-            $p['datum'] = $d;
-            $prilezitosti = [$p];
-            if ($web && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') { $upravy = zFormulare($_POST); }
+        if ($platne($arg['den'] ?? null)) {
+            $den = new DateTimeImmutable($arg['den']);
         } else {
-            $prilezitosti = dalsiPrilezitosti($odDatum, (int)$cfg['pocet'], $cfg);
+            // Bez data: nejbližší neděle nebo slavnost od zítřka (od dneška podle nastavení)
+            $od = new DateTimeImmutable($cfg['vcetne_dnes'] ? 'today' : 'tomorrow');
+            $den = dalsiPrilezitosti($od, 1, $cfg)[0]['datum'];
         }
-        $html = stranka($prilezitosti, $cfg, $web, $upravy, $web ? formular($cfg, $odDatum->format('Y-m-d')) : null);
+        $p = popisDne($den, $cfg + ['_vsedni' => ['nanebevstoupeni', 'bozi_telo']]);
+        if ($p === null) { throw new RuntimeException('Tento den není nedělí ani nastavenou slavností.'); }
+        $p['datum'] = $den;
+        if ($web && ($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') { $upravy = zFormulare($_POST); }
+        $html = stranka($p, $cfg, $web, $upravy, $web ? formular($cfg, $den->format('Y-m-d')) : null);
     } catch (Throwable $e) {
         if ($web) { http_response_code(500); }
-        $html = '<!doctype html><meta charset="utf-8"><p>Chyba: ' . htmlspecialchars($e->getMessage()) . '</p>';
+        // Na webu zůstane formulář, aby šlo zvolit jiný den
+        $html = '<!doctype html><meta charset="utf-8"><p>Chyba: ' . htmlspecialchars($e->getMessage()) . '</p>'
+            . ($web ? formular($cfg, $den ? $den->format('Y-m-d') : '') : '');
     }
     if (!$web && !empty($arg['vystup'])) { file_put_contents($arg['vystup'], $html); fwrite(STDERR, "Uloženo do {$arg['vystup']}\n"); return; }
     if ($web) { header('Content-Type: text/html; charset=utf-8'); }

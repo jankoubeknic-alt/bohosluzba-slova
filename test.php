@@ -94,17 +94,18 @@ jeRovno('korejs: 27. neděle A', korejsOdkaz('Žl 80 (79), 9+12.13-14.15-16.19-2
 jeRovno('korejs: 1. adventní B', korejsOdkaz('Žl 80 (79), 2ac+3b.15-16.18-19', 'B', '1. neděle adventní', $kc), __DIR__ . '/test/korejs/zalmy/TestPs080_03.pdf');
 jeRovno('korejs: 4. adventní C', korejsOdkaz('Žl 80 (79), 2ac+3b.15-16.18-19', 'C', '4. neděle adventní', $kc), __DIR__ . '/test/korejs/zalmy/TestPs080_03c.pdf');
 jeRovno('korejs: nic k žalmu', korejsOdkaz('Iz 25,6-10a', 'A', '27. neděle v mezidobí', $kc), null);
-// Více bohoslužeb najednou (web i CLI) se vykreslí bez varování a chyb
+// Jedna bohoslužba (web i tisk) se vykreslí bez varování a chyb
 set_error_handler(function (int $no, string $str) { throw new ErrorException($str, 0, $no); });
-$vice = [];
-foreach (['2026-10-04', '2026-10-11', '2026-10-18', '2026-10-25'] as $dd) {
-    $pp = popisDne($d($dd), $kc + ['_vsedni' => ['nanebevstoupeni', 'bozi_telo']]);
-    if ($pp !== null) { $pp['datum'] = $d($dd); $vice[] = $pp; }
-}
-$html = stranka($vice, $kc, true);
-$html2 = stranka($vice, $kc, false, null, null);
+$pp = popisDne($d('2026-10-18'), $kc + ['_vsedni' => ['nanebevstoupeni', 'bozi_telo']]);
+$pp['datum'] = $d('2026-10-18');
+$html = stranka($pp, $kc, true, null, formular($kc, '2026-10-18'));
+$html2 = stranka($pp, $kc, false);
 restore_error_handler();
-jeRovno('více bohoslužeb: počet krabiček', substr_count($html, 'class="krabice nezobrazovat"'), count($vice));
-jeRovno('více bohoslužeb: legenda', substr_count($html2, 'Zkratky:'), 1);
+jeRovno('bohoslužba: jedna krabička', substr_count($html, 'class="krabice nezobrazovat"'), 1);
+jeRovno('bohoslužba: legenda', substr_count($html2, 'Zkratky:'), 1);
+jeRovno('bohoslužba: titulek s datem', str_contains($html, '<title>Bohoslužba slova neděle 18. 10. 2026</title>'), true);
+jeRovno('bohoslužba: bez seznamu a sidebaru', str_contains($html, 'class="bocni"'), false);
+jeRovno('bohoslužba: odkaz na kontrolu nese nastavení', str_contains($html, 'href="?uprava=2026-10-18&amp;forma=1&amp;nanebevstoupeni=ctvrtek&amp;bozi_telo=ctvrtek&amp;vsedni=1"'), true);
+jeRovno('bohoslužba: formulář má den, ne počet', [str_contains($html, 'name="den"'), str_contains($html, 'name="pocet"')], [true, false]);
 echo "Hotovo: $ok v pořádku, $chyb chyb.\n";
 exit($chyb ? 1 : 0);

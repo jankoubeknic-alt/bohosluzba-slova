@@ -3,10 +3,10 @@
 Najde příští neděle a slavnosti, stáhne k nim vlastní texty z liturgie.cz a složí z nich stránku A4 (stejná osnova jako v dokumentu: úvodní obřady, bohoslužba slova, přímluvy, varianta A/B, závěr).
 
 ## Spuštění
-- Web: nahrajte soubor `bohosluzba.php` na PHP hosting (PHP 8.1+, dom, curl nebo allow_url_fopen; složka `cache/` musí být zapisovatelná). Nastavení a přepínače jsou na začátku souboru a také jako formulář nad výstupem.
-  - `bohosluzba.php?od=2026-10-05&pocet=4` (výchozí: od zítřka, 4 příležitosti)
-  - `bohosluzba.php?den=2026-11-01` (jeden konkrétní den)
-- Příkazová řádka: `php bohosluzba.php --od=2026-10-05 --pocet=4 --vystup=bohosluzby.html`
+- Web: nahrajte soubor `bohosluzba.php` na PHP hosting (PHP 8.1+, dom, curl nebo allow_url_fopen; složka `cache/` musí být zapisovatelná). Den vyberete v kalendáři ve formuláři nahoře; nastavení jsou na začátku souboru a také ve formuláři.
+  - `bohosluzba.php` (výchozí: nejbližší neděle nebo slavnost od zítřka)
+  - `bohosluzba.php?den=2026-10-18` (konkrétní den)
+- Příkazová řádka: `php bohosluzba.php --den=2026-10-18 --vystup=bohosluzba.html`
 - Test (volitelný): `php test.php` (kalendář a rozbor stránek na ukázkových datech v `test/`); ostatní soubory ke generování nejsou potřeba.
 
 ## Co dělá sám
@@ -14,13 +14,13 @@ Najde příští neděle a slavnosti, stáhne k nim vlastní texty z liturgie.cz
 - Gloria jen o nedělích mimo advent a půst a o slavnostech/svátcích; krédo vždy kromě vzpomínky na zemřelé.
 - V postní době vynechá Aleluja a zpívá jen verš.
 - Druhé čtení vynechá, když ho den nemá.
-- U každého dne uvede zdroj (adresu stránky na liturgie.cz) a na konci výstupu seznam odkazů ke kontrole textů (u Květné neděle i pašije).
+- U bohoslužby uvede zdroj (adresu stránky na liturgie.cz) v krabičce nad textem; u Květné neděle i odkaz na pašije.
 
 ## Kontrola a vlastní texty (web)
-- U každé bohoslužby v seznamu je odkaz „kontrola textů“ (`bohosluzba.php?uprava=RRRR-MM-DD`).
+- Nad textem je krabička s odkazem „Zkontrolovat texty“ (`bohosluzba.php?uprava=RRRR-MM-DD`).
 - Stránka ukáže automatický text každé části a odkaz na zdroj. Co sedí, zaškrtněte. Co nesedí, napište do políčka „Vlastní text“. Prázdné políčko = platí automatický text. Žalm: první odstavec je refrén, další odstavce jsou sloky. Verš zadávejte bez Aleluja.
 - Tlačítko „Vytvořit bohoslužbu s těmito texty“ pošle texty formulářem a vykreslí bohoslužbu. Na server se nic neukládá, do `cache/` jdou jen stažené stránky z liturgie.cz. Při novém otevření je kontrola prázdná.
-- Každá bohoslužba má vlastní krabičku: odkaz na kontrolu, zdroj, žalm s odkazem na Korejs a tlačítko „Tisk / PDF“. Tisk se zpřístupní až po zaškrtnutí všech částí této bohoslužby. Krabička se při tisku nezobrazí.
+- Krabička obsahuje odkaz na kontrolu, zdroj, žalm s odkazem na Korejs a tlačítko „Tisk / PDF“. Tisk se zpřístupní až po odeslání kontroly se všemi zaškrtnutými částmi. Krabička se při tisku nezobrazí.
 - Tisk nebo PDF: Ctrl+P v prohlížeči.
 - Stránka nemá přihlášení. Úpravy se ale nikam neukládají, takže nic nepřepíše. Na veřejném hostingu si ale stránku stejně nemusíte zpřístupňovat.
 - Žalm zpívá Honza nebo varhanice Lenka. Ve výstupu je jen číslo žalmu a odkaz na PDF nápěvu.
