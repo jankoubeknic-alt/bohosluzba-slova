@@ -742,7 +742,7 @@ function radkyZaver(): array
 /** Jedna bohoslužba (bez <html> obalu). */
 function bohosluzbaHtml(array $p, array $t, bool $zalomit): string
 {
-    $hlava = '<header' . ($zalomit ? ' class="nova-strana"' : '') . '><h2>' . h($p['nazev']) . '</h2>'
+    $hlava = '<header id="mse-' . $p['datum']->format('Y-m-d') . '"' . ($zalomit ? ' class="nova-strana"' : '') . '><h2>' . h($p['nazev']) . '</h2>'
         . '<p class="datum">' . h(cesDatum($p['datum'])) . ' · liturgický rok ' . h($p['rok']) . '</p>';
     $hlava .= '<p class="zdroj">Zdroj textů: <a href="' . h((string)$t['zdroj_url']) . '">' . h((string)$t['zdroj_url']) . '</a> (Český misál a Mešní lekcionář, © ČBK; vybráno podle roku ' . h($p['rok']) . ').</p>';
     if ($t['chyby']) {
@@ -796,7 +796,7 @@ function stranka(array $prilezitosti, array $cfg, bool $web = false, ?array $upr
         $t = uplatniUpravy(nactiTexty($p, $cfg), $upravy['texty'] ?? []);
         $t['zalm_cislo'] = zalmCislo($t['zalm']['citace'] ?? '');
         $t['korejs'] = $t['zalm_cislo'] !== '' ? korejsOdkaz($t['zalm']['citace'], $p['rok'], $p['nazev'], $cfg) : null;
-        $obsah[] = '<li>' . h(cesDatum($p['datum'])) . ': ' . h($p['nazev']) . '</li>';
+        $obsah[] = '<li><a href="#mse-' . h($p['datum']->format('Y-m-d')) . '">' . h(cesDatum($p['datum'])) . ': ' . h($p['nazev']) . '</a></li>';
         $casti[] = krabiceMse($p, $t, $web, $upravy, $cfg) . bohosluzbaHtml($p, $t, $i > 0);
     }
     $od = $prilezitosti ? $prilezitosti[0]['datum']->format('j. n. Y') : '';
@@ -936,7 +936,7 @@ function upravaStranka(DateTimeImmutable $d, array $cfg): string
     return "<!doctype html>\n<html lang=\"cs\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Kontrola textů $datum</title>\n<style>" . CSS . UPRAVA_CSS . "</style>\n</head>\n<body>\n"
         . '<h1>Kontrola textů: ' . h(cesDatum($d)) . '</h1><p class="datum">' . h($p['nazev']) . ' · liturgický rok ' . h($p['rok']) . '</p>'
         . '<p class="zdroj">Zdroj: <a href="' . h((string)$t['zdroj_url']) . '" target="_blank" rel="noopener">' . h((string)$t['zdroj_url']) . '</a>. Porovnejte každou část se zdrojem. Co sedí, zaškrtněte. Co nesedí, napište do políčka „Vlastní text“. Texty se nikam neukládají, použijí se jen v bohoslužbě, kterou tlačítkem vytvoříte.</p>'
-        . '<form method="post" action="?den=' . h($datum) . '">' . $casti
+        . '<form method="post" action="?den=' . h($datum) . '"><p><button type="button" onclick="document.querySelectorAll(\'form input[type=checkbox]\').forEach(function(c){c.checked=true;})">Všechno sedí</button></p>' . $casti
         . '<p><button>Vytvořit bohoslužbu s těmito texty (k tisku)</button> <a href="?den=' . h($datum) . '">Bohoslužbu bez úprav</a></p></form>'
         . "\n</body>\n</html>\n";
 }
