@@ -742,7 +742,7 @@ function radkyZaver(): array
 /** Jedna bohoslužba (bez <html> obalu). */
 function bohosluzbaHtml(array $p, array $t, bool $zalomit): string
 {
-    $hlava = '<header id="mse-' . $p['datum']->format('Y-m-d') . '"' . ($zalomit ? ' class="nova-strana"' : '') . '><h2>' . h($p['nazev']) . '</h2>'
+    $hlava = '<header id="text-' . $p['datum']->format('Y-m-d') . '"' . ($zalomit ? ' class="nova-strana"' : '') . '><h2>' . h($p['nazev']) . '</h2>'
         . '<p class="datum">' . h(cesDatum($p['datum'])) . ' · liturgický rok ' . h($p['rok']) . '</p>';
     $hlava .= '<p class="zdroj">Zdroj textů: <a href="' . h((string)$t['zdroj_url']) . '">' . h((string)$t['zdroj_url']) . '</a> (Český misál a Mešní lekcionář, © ČBK; vybráno podle roku ' . h($p['rok']) . ').</p>';
     if ($t['chyby']) {
@@ -785,7 +785,14 @@ form.nastaveni .radek { margin: 3pt 0; }
 a.tlacitko { display: inline-block; border: 1px solid #000; padding: 1pt 6pt; text-decoration: none; color: #000; }
 .krabice { border: 1px solid #000; padding: 6pt 8pt; margin: 8pt 0; font-size: 10pt; }
 .krabice h2 { font-size: 12pt; margin: 0 0 4pt; }
-@media print { form.nastaveni { display: none; } .nezobrazovat { display: none; } body { padding: 0; max-width: none; } a { color: #000; text-decoration: none; } }
+nav.bocni li { margin: 3pt 0; }
+.krabice, header[id] { scroll-margin-top: 10px; }
+@media screen and (min-width: 1100px) {
+  body { max-width: none; padding-left: 250px; }
+  nav.bocni { position: fixed; left: 8px; top: 8px; width: 230px; max-height: calc(100vh - 16px); overflow-y: auto; border-right: 1px solid #bbb; padding-right: 6px; }
+  nav.bocni ol { padding-left: 0; list-style: none; }
+}
+@media print { form.nastaveni { display: none; } .nezobrazovat, nav { display: none; } body { padding: 0; max-width: none; } a { color: #000; text-decoration: none; } }
 CSS;
 
 function stranka(array $prilezitosti, array $cfg, bool $web = false, ?array $upravy = null, ?string $formular = null): string
@@ -800,7 +807,7 @@ function stranka(array $prilezitosti, array $cfg, bool $web = false, ?array $upr
         $casti[] = krabiceMse($p, $t, $web, $upravy, $cfg) . bohosluzbaHtml($p, $t, $i > 0);
     }
     $od = $prilezitosti ? $prilezitosti[0]['datum']->format('j. n. Y') : '';
-    $uvod = '<h1>Bohoslužba slova</h1>' . ($formular ?? '') . '<nav><ol>' . implode('', $obsah) . '</ol></nav>'
+    $uvod = '<h1>Bohoslužba slova</h1>' . ($formular ?? '') . '<nav class="bocni"><ol>' . implode('', $obsah) . '</ol></nav>'
         . '<p class="legenda"><b>Misál:</b> <a href="' . h($zakladni) . '">' . h($zakladni) . '</a>, <b>kalendář:</b> <a href="' . h($zakladni . 'kalendar.htm') . '">' . h($zakladni . 'kalendar.htm') . '</a></p>'
         . ' ' . '<p class="legenda"><b>Zkratky:</b> <b>P</b> = předsedající (Vlasta nebo Honza, jsou-li přítomni, jinak jiný pověřený), <b>Ž</b> = žalmista (Honza nebo varhanice Lenka), <b>L</b> = lektor, <b>Vš</b> = všichni. Kurzívou jsou řádky, které se nečtou nahlas (pokyny a poznámky). Varianta A platí, když nejsou přítomni ani Vlasta, ani Honza; varianta B, když vede Vlasta nebo Honza.</p>';
     return "<!doctype html>\n<html lang=\"cs\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Bohoslužba slova od $od</title>\n<style>" . CSS . "</style>\n</head>\n<body>\n$uvod\n" . implode("\n", $casti) . "\n</body>\n</html>\n";
@@ -821,6 +828,7 @@ function krabiceMse(array $p, array $t, bool $web, ?array $upravy, array $cfg): 
         $tisk = $nove === [];
         $stav = '<p><b>Kontrola:</b> ručně upraveno: ' . h($ruc ? implode(', ', $ruc) : 'nic') . '. Neověřeno (nezaškrtnuto): ' . h($nove ? implode(', ', $nove) : 'nic') . '.</p>';
     }
+    $datum = $p['datum']->format('Y-m-d');
     $r = ['<p><b>' . h(cesDatum($p['datum'])) . ': ' . h($p['nazev']) . '</b></p>'];
     if ($web) { $r[] = '<p><b>Tisk bude dostupný až po kontrole této bohoslužby.</b></p>'; }
     $zdroj = '<a href="' . h((string)$t['zdroj_url']) . '" target="_blank" rel="noopener">' . h((string)$t['zdroj_url']) . '</a>';
@@ -835,7 +843,7 @@ function krabiceMse(array $p, array $t, bool $web, ?array $upravy, array $cfg): 
     }
     $r[] = $stav;
     if ($web) { $r[] = '<p><button type="button" onclick="window.print()"' . ($tisk ? '' : ' disabled') . '>Tisk / PDF</button>' . ($tisk ? '' : ' (zpřístupní se po zaškrtnutí všech částí)') . '</p>'; }
-    return '<div class="krabice nezobrazovat">' . implode('', $r) . '</div>';
+    return '<div class="krabice nezobrazovat" id="mse-' . $datum . '">' . implode('', $r) . '<p><a href="#text-' . $datum . '">↓ Na text bohoslužby</a></p></div>';
 }
 
 // ======================= KONTROLA A VLASTNÍ TEXTY =======================
