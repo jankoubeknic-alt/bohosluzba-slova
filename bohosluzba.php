@@ -632,7 +632,7 @@ function radkySlova(array $p, array $t): array
 
     $cislo = $t['zalm_cislo'] ?? '';
     $zpev = $t['zalm']['citace'] ?? '';
-    $r[] = ['pokyn', 'Žalm. Zpívá Vlasta nebo varhanice Lenka. Lid sedí. ' . ($cislo !== '' ? "($cislo) – text a nápěv v Korejsovi." : ($zpev !== '' ? "($zpev) – doplňte z misálu." : '(doplňte z misálu.)'))];
+    $r[] = ['pokyn', 'Žalm. Zpívá Honza nebo varhanice Lenka. Lid sedí. ' . ($cislo !== '' ? "($cislo) – text a nápěv v Korejsovi." : ($zpev !== '' ? "($zpev) – doplňte z misálu." : '(doplňte z misálu.)'))];
 
     if (!empty($t['cteni2'])) { $cteni('cteni2', '2.', 'Čtení z ...'); }
 
@@ -790,49 +790,52 @@ CSS;
 
 function stranka(array $prilezitosti, array $cfg, bool $web = false, ?array $upravy = null, ?string $formular = null): string
 {
-    $casti = []; $obsah = []; $odkazy = []; $maDruheCteni = false;
+    $casti = []; $obsah = [];
+    $zakladni = preg_match('~^https?://~', $cfg['zdroj']) ? rtrim($cfg['zdroj'], '/') . '/' : 'https://m.liturgie.cz/misal/';
     foreach ($prilezitosti as $i => $p) {
         $t = uplatniUpravy(nactiTexty($p, $cfg), $upravy['texty'] ?? []);
         $t['zalm_cislo'] = zalmCislo($t['zalm']['citace'] ?? '');
         $t['korejs'] = $t['zalm_cislo'] !== '' ? korejsOdkaz($t['zalm']['citace'], $p['rok'], $p['nazev'], $cfg) : null;
-        $maDruheCteni = !empty($t['cteni2']);
-        $casti[] = bohosluzbaHtml($p, $t, $i > 0);
         $obsah[] = '<li>' . h(cesDatum($p['datum'])) . ': ' . h($p['nazev']) . '</li>';
-        $popisek = h(cesDatum($p['datum'])) . ': ' . h($p['nazev']);
-        $zdroj = '<a href="' . h((string)$t['zdroj_url']) . '">' . h((string)$t['zdroj_url']) . '</a>';
-        $kontrola = $web ? ' – <a href="?uprava=' . h($p['datum']->format('Y-m-d')) . '">kontrola textů</a>' : '';
-        $odkazy[] = '<p>' . $popisek . $kontrola . '<br>zdroj: ' . $zdroj . '</p>';
-        if (!empty($p['pasije'])) { $odkazy[] = '<p>' . $popisek . ', pašije (evangelium v ročním cyklu A/B/C): ' . $zdroj . '</p>'; }
-        if ($t['zalm_cislo'] !== '') {
-            $zalmOdkaz = $t['korejs'] !== null
-                ? '<a class="tlacitko" href="' . h($t['korejs']) . '" target="_blank" rel="noopener">Tisk žalmu (Korejs)</a>'
-                : 'nápěv na Korejsovi nenalezen, <a href="' . h(rtrim($cfg['korejs'], '/') . '/podlelekcionare.html') . '" target="_blank" rel="noopener">tabulka lekcionáře</a>';
-            $odkazy[] = '<p>' . $popisek . ', žalm ' . h($t['zalm_cislo']) . ': ' . $zalmOdkaz . '</p>';
-        }
+        $casti[] = krabiceMse($p, $t, $web, $upravy, $cfg) . bohosluzbaHtml($p, $t, $i > 0);
     }
-    $zakladni = preg_match('~^https?://~', $cfg['zdroj']) ? rtrim($cfg['zdroj'], '/') . '/' : 'https://m.liturgie.cz/misal/';
-    $odkazy[] = '<p>Misál (rejstřík všech stránek): <a href="' . h($zakladni) . '">' . h($zakladni) . '</a></p>';
-    $odkazy[] = '<p>Kalendář misálu (rozpis dní a slavností): <a href="' . h($zakladni . 'kalendar.htm') . '">' . h($zakladni . 'kalendar.htm') . '</a></p>';
     $od = $prilezitosti ? $prilezitosti[0]['datum']->format('j. n. Y') : '';
+    $uvod = '<h1>Bohoslužba slova</h1>' . ($formular ?? '') . '<nav><ol>' . implode('', $obsah) . '</ol></nav>'
+        . '<p class="legenda"><b>Misál:</b> <a href="' . h($zakladni) . '">' . h($zakladni) . '</a>, <b>kalendář:</b> <a href="' . h($zakladni . 'kalendar.htm') . '">' . h($zakladni . 'kalendar.htm') . '</a></p>'
+        . ' ' . $legend;
+    return "<!doctype html>\n<html lang=\"cs\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Bohoslužba slova od $od</title>\n<style>" . CSS . "</style>\n</head>\n<body>\n$uvod\n" . implode("\n", $casti) . "\n</body>\n</html>\n";
+}
 
-    // Stav kontroly: tisk až po zaškrtnutí všech částí (jen po odeslání kontroly)
+/**
+ * Krabička jedné bohoslužby: zdroj, kontrola (jen web), žalm s odkazem na Korejs a tisk.
+ * Tisk se zpřístupní až po zaškrtnutí všech částí této bohoslužby (odeslaná kontrola).
+ */
+function krabiceMse(array $p, array $t, bool $web, ?array $upravy, array $cfg): string
+{
+    $datum = $p['datum']->format('Y-m-d');
+    $nazvy = castyUpravy();
     $tisk = false; $stav = '';
     if ($upravy !== null) {
-        $nazvy = castyUpravy();
         $ruc = array_map(fn($k) => $nazvy[$k][0], array_keys($upravy['texty']));
-        $nove = array_map(fn($k) => $nazvy[$k][0], array_diff(array_keys($nazvy), array_keys($upravy['overeno']), $maDruheCteni ? [] : ['cteni2']));
+        $nove = array_map(fn($k) => $nazvy[$k][0], array_diff(array_keys($nazvy), array_keys($upravy['overeno']), !empty($t['cteni2']) ? [] : ['cteni2']));
         $tisk = $nove === [];
         $stav = '<p><b>Kontrola:</b> ručně upraveno: ' . h($ruc ? implode(', ', $ruc) : 'nic') . '. Neověřeno (nezaškrtnuto): ' . h($nove ? implode(', ', $nove) : 'nic') . '.</p>';
     }
-    $krabice = '<div class="krabice nezobrazovat"><h2>Kontrola textů</h2>'
-        . ($web ? '<p><b>Tisk bude dostupný až po kontrole textů.</b> Porovnejte každou část se zdrojem a potom vytvořte bohoslužbu s vlastními texty tlačítkem na stránce kontroly.</p>' : '')
-        . implode('', $odkazy)
-        . $stav
-        . ($web ? '<p><button type="button" onclick="window.print()"' . ($tisk ? '' : ' disabled') . '>Tisk / PDF</button>' . ($tisk ? '' : ' (zpřístupní se po zaškrtnutí všech částí)') . '</p>' : '')
-        . '</div>';
-    $uvod = '<h1>Bohoslužba slova</h1>' . ($formular ?? '') . $krabice . '<nav><ol>' . implode('', $obsah) . '</ol></nav>'
-        . '<p class="legenda"><b>Zkratky:</b> <b>P</b> = předsedající (Vlasta nebo Honza, jsou-li přítomni, jinak jiný pověřený), <b>Ž</b> = žalmista (Vlasta nebo varhanice Lenka), <b>L</b> = lektor, <b>Vš</b> = všichni. Kurzívou jsou řádky, které se nečtou nahlas (pokyny a poznámky). Varianta A platí, když nejsou přítomni ani Vlasta, ani Honza; varianta B, když vede Vlasta nebo Honza.</p>';
-    return "<!doctype html>\n<html lang=\"cs\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Bohoslužba slova od $od</title>\n<style>" . CSS . "</style>\n</head>\n<body>\n$uvod\n" . implode("\n", $casti) . "\n</body>\n</html>\n";
+    $r = ['<p><b>' . h(cesDatum($p['datum'])) . ': ' . h($p['nazev']) . '</b></p>'];
+    if ($web) { $r[] = '<p><b>Tisk bude dostupný až po kontrole této bohoslužby.</b></p>'; }
+    $zdroj = '<a href="' . h((string)$t['zdroj_url']) . '" target="_blank" rel="noopener">' . h((string)$t['zdroj_url']) . '</a>';
+    $r[] = '<p>Zdroj textů: ' . $zdroj . (!empty($p['pasije']) ? ' (včetně pašijí, evangelium v ročním cyklu A/B/C)' : '') . '</p>';
+    if ($web) { $r[] = '<p><a class="tlacitko" href="?uprava=' . h($datum) . '">Zkontrolovat texty</a></p>'; }
+    if ($t['zalm_cislo'] !== '') {
+        $zalm = '<p>Žalm ' . h($t['zalm_cislo']) . ' – zpívá Honza nebo varhanice Lenka. ';
+        $zalm .= $t['korejs'] !== null
+            ? '<a class="tlacitko" href="' . h($t['korejs']) . '" target="_blank" rel="noopener">Tisk žalmu (Korejs)</a>'
+            : 'Nápěv na Korejsovi nenalezen, <a href="' . h(rtrim($cfg['korejs'], '/') . '/podlelekcionare.html') . '" target="_blank" rel="noopener">tabulka lekcionáře</a>.';
+        $r[] = $zalm . '</p>';
+    }
+    $r[] = $stav;
+    if ($web) { $r[] = '<p><button type="button" onclick="window.print()"' . ($tisk ? '' : ' disabled') . '>Tisk / PDF</button>' . ($tisk ? '' : ' (zpřístupní se po zaškrtnutí všech částí)') . '</p>'; }
+    return '<div class="krabice nezobrazovat">' . implode('', $r) . '</div>';
 }
 
 // ======================= KONTROLA A VLASTNÍ TEXTY =======================

@@ -20,9 +20,10 @@ Najde příští neděle a slavnosti, stáhne k nim vlastní texty z liturgie.cz
 - U každé bohoslužby v seznamu je odkaz „kontrola textů“ (`bohosluzba.php?uprava=RRRR-MM-DD`).
 - Stránka ukáže automatický text každé části a odkaz na zdroj. Co sedí, zaškrtněte. Co nesedí, napište do políčka „Vlastní text“. Prázdné políčko = platí automatický text. Žalm: první odstavec je refrén, další odstavce jsou sloky. Verš zadávejte bez Aleluja.
 - Tlačítko „Vytvořit bohoslužbu s těmito texty“ pošle texty formulářem a vykreslí bohoslužbu. Na server se nic neukládá, do `cache/` jdou jen stažené stránky z liturgie.cz. Při novém otevření je kontrola prázdná.
-- Nahoře v bohoslužbě je řádek „Kontrola“ s ručně upravenými a neověřenými částmi. Při tisku se nezobrazí.
+- Každá bohoslužba má vlastní krabičku: odkaz na kontrolu, zdroj, žalm s odkazem na Korejs a tlačítko „Tisk / PDF“. Tisk se zpřístupní až po zaškrtnutí všech částí této bohoslužby. Krabička se při tisku nezobrazí.
 - Tisk nebo PDF: Ctrl+P v prohlížeči.
 - Stránka nemá přihlášení. Úpravy se ale nikam neukládají, takže nic nepřepíše. Na veřejném hostingu si ale stránku stejně nemusíte zpřístupňovat.
+- Žalm zpívá Honza nebo varhanice Lenka. Ve výstupu je jen číslo žalmu a odkaz na PDF nápěvu.
 - Přímluvy (modrá knížka) se do kontroly nezadávají. Zůstávají jako „VLASTNÍ TEXT PŘÍMLUV“.
 
 ## Žalm a nápěv
