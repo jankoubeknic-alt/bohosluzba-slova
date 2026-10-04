@@ -76,9 +76,7 @@ jeRovno('tlačítko je nadpis', $snip[2]['nazev'], 'Čtení z Písma v roce B');
 jeRovno('zpět mimo text', array_map(fn($r) => $r['t'], $snip[3]['radky']), ['Text.']);
 // Vlastní texty (kontrola): přepíší automatický text v paměti, ostatní části zůstanou; nic se neukládá
 $pu = popisDne($d('2026-10-11'), $cfg); $pu['datum'] = $d('2026-10-11');
-$tu = uplatniUpravy(nactiTexty($pu, $cfg), ['zalm' => "Vlastní refrén.\n\nSloka X.\n\nSloka Y.", 'verš' => 'Vlastní verš.', 'cteni1' => 'Vlastní čtení.']);
-jeRovno('úprava: refrén', $tu['zalm']['refren'], 'Vlastní refrén.');
-jeRovno('úprava: sloky', $tu['zalm']['sloky'], ['Sloka X.', 'Sloka Y.']);
+$tu = uplatniUpravy(nactiTexty($pu, $cfg), ['verš' => 'Vlastní verš.', 'cteni1' => 'Vlastní čtení.']);
 jeRovno('úprava: verš', $tu['verš']['bez_aleluja'], 'Vlastní verš.');
 jeRovno('úprava: 1. čtení', $tu['cteni1']['text'], 'Vlastní čtení.');
 jeRovno('úprava: vstupní beze změny', $tu['vstupni'], 'Testovací vstupní modlitba 28. neděle. Skrze našeho Pána.');
@@ -87,5 +85,14 @@ $zf = zFormulare(['ov' => ['verš' => " Text \r\n", 'cteni1' => ''], 'ok' => ['v
 jeRovno('formulář: texty', $zf['texty'], ['verš' => 'Text']);
 jeRovno('formulář: sedí', $zf['overeno'], ['verš' => true]);
 jeRovno('přímluvy nejsou v kontrole', array_key_exists('primluvy', castyUpravy()), false);
+// Žalm: v bohoslužbě jen číslo, PDF nápěvu z Korejse podle lekcionáře (verše, příležitost, cyklus)
+jeRovno('žalm: číslo', zalmCislo('Žl 80 (79), 9+12.13-14.15-16.19-20'), 'Žl 80 (79)');
+jeRovno('žalm: číslo bez závorky', zalmCislo('Žl 98,1.2-3ab.3cd-4'), 'Žl 98');
+jeRovno('žalm: není žalm', zalmCislo('Iz 25,6-10a'), '');
+$kc = $cfg; $kc['korejs'] = __DIR__ . '/test/korejs/';
+jeRovno('korejs: 27. neděle A', korejsOdkaz('Žl 80 (79), 9+12.13-14.15-16.19-20', 'A', '27. neděle v mezidobí', $kc), __DIR__ . '/test/korejs/zalmy/TestPs080_05.pdf');
+jeRovno('korejs: 1. adventní B', korejsOdkaz('Žl 80 (79), 2ac+3b.15-16.18-19', 'B', '1. neděle adventní', $kc), __DIR__ . '/test/korejs/zalmy/TestPs080_03.pdf');
+jeRovno('korejs: 4. adventní C', korejsOdkaz('Žl 80 (79), 2ac+3b.15-16.18-19', 'C', '4. neděle adventní', $kc), __DIR__ . '/test/korejs/zalmy/TestPs080_03c.pdf');
+jeRovno('korejs: nic k žalmu', korejsOdkaz('Iz 25,6-10a', 'A', '27. neděle v mezidobí', $kc), null);
 echo "Hotovo: $ok v pořádku, $chyb chyb.\n";
 exit($chyb ? 1 : 0);

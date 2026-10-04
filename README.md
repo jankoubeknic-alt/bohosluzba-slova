@@ -25,6 +25,12 @@ Najde příští neděle a slavnosti, stáhne k nim vlastní texty z liturgie.cz
 - Stránka nemá přihlášení. Úpravy se ale nikam neukládají, takže nic nepřepíše. Na veřejném hostingu si ale stránku stejně nemusíte zpřístupňovat.
 - Přímluvy (modrá knížka) se do kontroly nezadávají. Zůstávají jako „VLASTNÍ TEXT PŘÍMLUV“.
 
+## Žalm a nápěv
+- Číslo žalmu bere generátor z misálu (Mezizpěv, např. „Žl 80“). Text žalmu do bohoslužby nevkládá.
+- Nápěv a text zpívá Vlasta nebo varhanice Lenka. Ve výstupu je to jen pokyn s číslem žalmu.
+- Tlačítko „Tisk žalmu (Korejs)“ otevře PDF žalmu z https://sdh.cz/korejs/ v nové záložce. Vybere se podle lekcionáře (číslo žalmu, verše, příležitost, cyklus). PDF se nekopírují, generátor jen odkazuje.
+- Tabulka se stáhne jednou za cache_dni a uloží do `cache/korejs_podlelekcionare.html`. Nastavení: `'korejs'` v bloku NASTAVENÍ.
+
 ## Co zůstává ručně
 - Přímluvy (modrá knížka) a homilie (Minutěnky). Pokud se kterákoli část nepodaří najít, v textu zůstane `VLASTNÍ TEXT` a nahoře se objeví rámeček „Pozor“.
 
@@ -45,4 +51,5 @@ Pak otevřete http://localhost:8080/bohosluzba.php. Cache se ukládá v kontejne
 - Kód generátoru (`bohosluzba.php`, `test.php`, `Dockerfile`, tento README) je pod licencí MIT, viz `LICENSE`.
 - Texty bohoslužeb (modlitby, čtení, žalmy, evangelia, krédo, Gloria a další) jsou © Česká biskupská konference / Liturgie.cz (Český misál a Mešní lekcionář). Repozitář je neobsahuje. Generátor je stahuje z liturgie.cz do `cache/`, které je v `.gitignore`.
 - Soubory v `test/` jsou vymyšlená ukázková data pro testy, žádný text z liturgie.cz v nich není.
+- Nápěvy a PDF žalmů jsou projekt Korejs (https://sdh.cz/korejs/). Generátor na ně jen odkazuje a nic z nich neukládá.
 - Vygenerované bohoslužby slouží k přípravě. Nešiřte je bez svolení nositele práv.

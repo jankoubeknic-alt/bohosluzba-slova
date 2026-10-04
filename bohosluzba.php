@@ -18,6 +18,7 @@ $CFG = [
     'cache' => __DIR__ . '/cache',          // kam se ukládají stažené stránky (musí být zapisovatelná)
     'cache_dni' => 90,
     'user_agent' => 'BohosluzbaSlova-generator/1.0 (osobni priprava bohosluzeb)',
+    'korejs' => 'https://sdh.cz/korejs/',    // tabulka žalmů s nápěvy (Korejs); generátor jen odkazuje na PDF, nic nekopíruje
 
     // ---- PŘEPÍNAČE ----
     'pocet' => 4,                            // kolik dalších příležitostí vypsat
@@ -254,13 +255,18 @@ function stahniStranku(string $relativni, array $cfg): string
         if ($raw === false) { throw new RuntimeException("Soubor $cesta neexistuje."); }
         return jakoUtf8($raw);
     }
+    return stahniUrl(rtrim($zdroj, '/') . '/' . $relativni, $relativni, $cfg);
+}
+
+/** Stáhne vzdálenou stránku (nebo ji vezme z cache/, nejdéle cache_dni dní). */
+function stahniUrl(string $url, string $nazevSouboru, array $cfg): string
+{
     // Cache
     @mkdir($cfg['cache'], 0775, true);
-    $soubor = $cfg['cache'] . '/' . preg_replace('~[^A-Za-z0-9_.-]+~', '_', $relativni);
+    $soubor = $cfg['cache'] . '/' . preg_replace('~[^A-Za-z0-9_.-]+~', '_', $nazevSouboru);
     if (is_file($soubor) && filemtime($soubor) > time() - $cfg['cache_dni'] * 86400) {
         return file_get_contents($soubor);
     }
-    $url = rtrim($zdroj, '/') . '/' . $relativni;
     $raw = false;
     if (function_exists('curl_init')) {
         $ch = curl_init($url);
@@ -277,6 +283,52 @@ function stahniStranku(string $relativni, array $cfg): string
     $html = jakoUtf8($raw);
     @file_put_contents($soubor, $html);
     return $html;
+}
+
+/** Řádky tabulky žalmů podle lekcionáře (Korejs): odkaz na PDF, číslo, verše, příležitost, cyklus. */
+function nactiKorejs(array $cfg): array
+{
+    static $cache = [];
+    $zaklad = rtrim($cfg['korejs'], '/') . '/';
+    if (isset($cache[$zaklad])) { return $cache[$zaklad]; }
+    $cache[$zaklad] = [];
+    try {
+        $html = preg_match('~^https?://~', $zaklad)
+            ? stahniUrl($zaklad . 'podlelekcionare.html', 'korejs_podlelekcionare.html', $cfg)
+            : (@file_get_contents($zaklad . 'podlelekcionare.html') ?: '');
+    } catch (Throwable $e) { return $cache[$zaklad]; }
+    if ($html === '') { return $cache[$zaklad]; }
+    $dom = nactiDom($html);
+    foreach ($dom->getElementsByTagName('tr') as $tr) {
+        $td = $tr->getElementsByTagName('td');
+        if ($td->length !== 12 || !($a = $td->item(0)->getElementsByTagName('a')->item(0))) { continue; }
+        $bunka = fn(int $i) => trim(preg_replace('~\s+~u', ' ', $td->item($i)->textContent));
+        $cache[$zaklad][] = ['url' => $zaklad . $a->getAttribute('href'), 'bibl' => $bunka(2), 'verse' => $bunka(3), 'prilezitost' => $bunka(7), 'cyklus' => $bunka(8)];
+    }
+    return $cache[$zaklad];
+}
+
+/** Číslo žalmu z citace z misálu: „Žl 80 (79), 9+12…“ => „Žl 80 (79)“. */
+function zalmCislo(string $citace): string
+{
+    return preg_match('~^(Žl?\s*\d+(?:\s*\(\d+\))?)~u', trim($citace), $m) ? $m[1] : '';
+}
+
+/** PDF žalmu na Korejsovi: shoda čísla žalmu, vezme se nejlepší shoda verší, příležitosti a cyklu. */
+function korejsOdkaz(string $citace, string $rok, string $prilezitost, array $cfg): ?string
+{
+    if (!preg_match('~^Žl?\s*(\d+)\s*(?:\(\d+\))?\s*,?\s*(.*)$~u', trim($citace), $m)) { return null; }
+    $verse = preg_replace('~\s+|Odp.*$~u', '', $m[2]);
+    $nejlepsi = null; $skore = -1;
+    foreach (nactiKorejs($cfg) as $r) {
+        if (!preg_match('~^Žl?\s*(\d+)~u', $r['bibl'], $mb) || $mb[1] !== $m[1]) { continue; }
+        $s = 0;
+        if ($verse !== '' && preg_replace('~\s+~u', '', $r['verse']) === $verse) { $s += 4; }
+        if ($r['prilezitost'] === $prilezitost) { $s += 2; }
+        if ($rok !== '' && str_contains($r['cyklus'], $rok)) { $s += 1; }
+        if ($s > $skore) { $skore = $s; $nejlepsi = $r; }
+    }
+    return $nejlepsi['url'] ?? null;
 }
 
 function jakoUtf8(string $raw): string
@@ -578,17 +630,9 @@ function radkySlova(array $p, array $t): array
     };
     $cteni('cteni1', '1.', 'Čtení z ...');
 
-    $z = $t['zalm'] ?? null;
-    $r[] = ['pokyn', 'Žalm. Zpívá Vlasta nebo varhanice Lenka. Lid sedí.' . ($z && $z['citace'] ? ' (' . $z['citace'] . ')' : '')];
-    if ($z && $z['refren'] && $z['sloky']) {
-        $r[] = ['Ž', $z['refren']];
-        $r[] = ['Vš', $z['refren']];
-        foreach ($z['sloky'] as $s) { $r[] = ['Ž', $s]; $r[] = ['Vš', $z['refren']]; }
-    } elseif ($z && $z['sloky']) {
-        $r[] = ['Ž', implode("\n\n", $z['sloky'])];
-    } else {
-        $r[] = ['Ž', '[[VLASTNÍ TEXT]]'];
-    }
+    $cislo = $t['zalm_cislo'] ?? '';
+    $zpev = $t['zalm']['citace'] ?? '';
+    $r[] = ['pokyn', 'Žalm. Zpívá Vlasta nebo varhanice Lenka. Lid sedí. ' . ($cislo !== '' ? "($cislo) – text a nápěv v Korejsovi." : ($zpev !== '' ? "($zpev) – doplňte z misálu." : '(doplňte z misálu.)'))];
 
     if (!empty($t['cteni2'])) { $cteni('cteni2', '2.', 'Čtení z ...'); }
 
@@ -738,6 +782,7 @@ tr.pokyn td { text-align: center; font-style: italic; }
 form.nastaveni { border: 1px solid #000; padding: 4pt 6pt; margin: 0 0 8pt; font-size: 10pt; }
 nav ol { margin: 0 0 8pt; padding-left: 16pt; }
 form.nastaveni .radek { margin: 3pt 0; }
+a.tlacitko { display: inline-block; border: 1px solid #000; padding: 1pt 6pt; text-decoration: none; color: #000; }
 .krabice { border: 1px solid #000; padding: 6pt 8pt; margin: 8pt 0; font-size: 10pt; }
 .krabice h2 { font-size: 12pt; margin: 0 0 4pt; }
 @media print { form.nastaveni { display: none; } .nezobrazovat { display: none; } body { padding: 0; max-width: none; } a { color: #000; text-decoration: none; } }
@@ -748,6 +793,8 @@ function stranka(array $prilezitosti, array $cfg, bool $web = false, ?array $upr
     $casti = []; $obsah = []; $odkazy = []; $maDruheCteni = false;
     foreach ($prilezitosti as $i => $p) {
         $t = uplatniUpravy(nactiTexty($p, $cfg), $upravy['texty'] ?? []);
+        $t['zalm_cislo'] = zalmCislo($t['zalm']['citace'] ?? '');
+        $t['korejs'] = $t['zalm_cislo'] !== '' ? korejsOdkaz($t['zalm']['citace'], $p['rok'], $p['nazev'], $cfg) : null;
         $maDruheCteni = !empty($t['cteni2']);
         $casti[] = bohosluzbaHtml($p, $t, $i > 0);
         $obsah[] = '<li>' . h(cesDatum($p['datum'])) . ': ' . h($p['nazev']) . '</li>';
@@ -756,6 +803,12 @@ function stranka(array $prilezitosti, array $cfg, bool $web = false, ?array $upr
         $kontrola = $web ? ' – <a href="?uprava=' . h($p['datum']->format('Y-m-d')) . '">kontrola textů</a>' : '';
         $odkazy[] = '<p>' . $popisek . $kontrola . '<br>zdroj: ' . $zdroj . '</p>';
         if (!empty($p['pasije'])) { $odkazy[] = '<p>' . $popisek . ', pašije (evangelium v ročním cyklu A/B/C): ' . $zdroj . '</p>'; }
+        if ($t['zalm_cislo'] !== '') {
+            $zalmOdkaz = $t['korejs'] !== null
+                ? '<a class="tlacitko" href="' . h($t['korejs']) . '" target="_blank" rel="noopener">Tisk žalmu (Korejs)</a>'
+                : 'nápěv na Korejsovi nenalezen, <a href="' . h(rtrim($cfg['korejs'], '/') . '/podlelekcionare.html') . '" target="_blank" rel="noopener">tabulka lekcionáře</a>';
+            $odkazy[] = '<p>' . $popisek . ', žalm ' . h($t['zalm_cislo']) . ': ' . $zalmOdkaz . '</p>';
+        }
     }
     $zakladni = preg_match('~^https?://~', $cfg['zdroj']) ? rtrim($cfg['zdroj'], '/') . '/' : 'https://m.liturgie.cz/misal/';
     $odkazy[] = '<p>Misál (rejstřík všech stránek): <a href="' . h($zakladni) . '">' . h($zakladni) . '</a></p>';
@@ -803,7 +856,7 @@ function castyUpravy(): array
     return [
         'vstupni' => ['Vstupní modlitba', 'vstupní modlitba'],
         'cteni1' => ['1. čtení', '1. čtení'],
-        'zalm' => ['Žalm', 'žalm'],
+        'zalm' => ['Žalm (jen číslo; text a nápěv jsou v Korejsovi)', 'žalm'],
         'cteni2' => ['2. čtení (jen dny s druhým čtením)', null],
         'verš' => ['Zpěv před evangeliem (verš bez Aleluja)', 'verš před evangeliem'],
         'evangelium' => ['Evangelium', 'evangelium'],
@@ -840,11 +893,6 @@ function uplatniUpravy(array $t, array $texty): array
             case 'verš':
                 $t['verš'] = array_merge(['citace' => ''], $t['verš'] ?? [], ['text' => $text, 'bez_aleluja' => $text]);
                 break;
-            case 'zalm':
-                $casti = array_values(array_filter(array_map('trim', preg_split('~\n\s*\n~', $text)), fn($c) => $c !== ''));
-                $refren = array_shift($casti) ?? '';
-                $t['zalm'] = array_merge(['citace' => ''], $t['zalm'] ?? [], ['refren' => $refren, 'sloky' => $casti]);
-                break;
         }
         $popis = castyUpravy()[$klic][1] ?? null;
         if ($popis !== null) { $t['chyby'] = array_values(array_filter($t['chyby'] ?? [], fn($c) => $c !== "chybí: $popis")); }
@@ -879,7 +927,7 @@ function upravaStranka(DateTimeImmutable $d, array $cfg): string
         $auto = automatickyText($klic, $t);
         $casti .= '<section class="cast"><h3>' . h($nadpis) . '</h3>'
             . '<div class="auto"><b>Automatický text:</b><br>' . ($auto !== '' ? h($auto) : '<em>nenalezen</em>') . '</div>'
-            . '<label>Vlastní text (prázdné = použije se automatický):<textarea name="ov[' . $klic . ']" rows="' . ($klic === 'zalm' ? 8 : 5) . '"></textarea></label>'
+            . ($klic === 'zalm' ? '' : '<label>Vlastní text (prázdné = použije se automatický):<textarea name="ov[' . $klic . ']" rows="5"></textarea></label>')
             . '<label><input type="checkbox" name="ok[' . $klic . ']" value="1"> Sedí, text jsem zkontroloval</label></section>';
     }
     return "<!doctype html>\n<html lang=\"cs\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Kontrola textů $datum</title>\n<style>" . CSS . UPRAVA_CSS . "</style>\n</head>\n<body>\n"
