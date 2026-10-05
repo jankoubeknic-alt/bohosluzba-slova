@@ -137,7 +137,7 @@ function cisloTydneMezidobi(DateTimeImmutable $s): ?int
     $adv = adventZacatek($y);
     $krtu = krtuPane($y);
     if ($s == $krtu) { return 1; }
-    if ($diff >= 56 && $s < $adv) { return 35 - intdiv(dnuOd($s, $adv), 7); }
+    if ($diff >= 49 && $s < $adv) { return 35 - intdiv(dnuOd($s, $adv), 7); } // od Letnic (týden 8) do adventu
     if ($s > $krtu && $diff < -46) { return 2 + intdiv(dnuOd($krtu, $s) - 1, 7); }
     return null;
 }
@@ -221,6 +221,10 @@ function popisDne(DateTimeImmutable $d, array $cfg): ?array
             return den($nazev . ' (přeneseno)', $odk, $h, obdobiDne($d), $rok);
         }
     }
+    // Velikonoční triduum: Zelený čtvrtek (Gloria, bez Vyznání) a Velký pátek (bez Glorie a Vyznání)
+    $diffTriduum = dnuOd(velikonoce($y), $d);
+    if ($diffTriduum === -3) { return den('Zelený čtvrtek', odkaz('04triduum', '01ctvrtek.htm'), 'slavnost', 'pust', $rok, ['kredo' => false]); }
+    if ($diffTriduum === -2) { return den('Velký pátek', odkaz('04triduum', '02patek.htm'), 'triduum', 'pust', $rok, ['pasije' => true]); }
     // Všední den bez slavnosti: text ze stránky podle období
     $f = feriePodleObdobi($d);
     if ($f !== null) { return den($f['nazev'], $f['odkaz'], 'ferie', obdobiDne($d), $f['cyklus']); }
@@ -503,6 +507,8 @@ function typSekce(string $nazev): ?string
         (bool)preg_match('~^2\.\s*čtení~iu', $nazev) => 'cteni2',
         (bool)preg_match('~^zpěv před evangeliem~iu', $nazev) => 'verš',
         (bool)preg_match('~^evangelium~iu', $nazev) => 'evangelium',
+        // Pašije na Květnou neděli a Velký pátek: „Pašije v ročním cyklu A – Mt …“, „Pašije – Jan …“
+        (bool)preg_match('~^Pašije\s+(v ročním cyklu [ABC]|[–—-])~iu', $nazev) => 'evangelium',
         default => null,
     };
 }
@@ -650,7 +656,10 @@ function nactiTexty(array $prilezitost, array $cfg): array
     // Vstupní modlitba je u některých dnů vánočního období ve dvou zněních (před / po slavnosti Zjevení Páně)
     $datum = $prilezitost['datum'] ?? null;
     $po = $datum instanceof DateTimeImmutable && $datum->format('m') === '01' && $datum->format('d') >= '07';
-    $vysl['vstupni'] = sekceTextu($sekce, '~^Vstupní modlitba~iu') ?? sekceTextu($sekce, $po ? '~^Po slavnosti Zjevení~iu' : '~^Před slavností Zjevení~iu');
+    $vysl['vstupni'] = sekceTextu($sekce, '~^Vstupní modlitba~iu') ?? sekceTextu($sekce, $po ? '~^Po slavnosti Zjevení~iu' : '~^Před slavností Zjevení~iu')
+        ?? sekceTextu($sekce, '~^Modlitba$~u'); // Velký pátek: úvodní modlitba se jmenuje jen „Modlitba“
+    // pokyn před textem modlitby („(Neříká se Modleme se)“) nepatří do modlitby
+    if ($vysl['vstupni'] !== null) { $vysl['vstupni'] = trim(preg_replace('~^\([^)]*\)\s*~u', '', $vysl['vstupni'])); }
     $vysl['po_prijimani'] = sekceTextu($sekce, '~^Modlitba po přijímání~iu');
     $vyber = vyberCteni($sekce, $prilezitost['rok']);
     if ($vyber['cteni1']) { $vysl['cteni1'] = rozborCteni($vyber['cteni1']); }
@@ -919,7 +928,7 @@ function krabiceMse(array $p, array $t, bool $web, ?array $upravy, array $cfg): 
     $r = ['<p><b>' . h(cesDatum($p['datum'])) . ': ' . h($p['nazev']) . '</b></p>'];
     if ($web) { $r[] = '<p><b>Tisk bude dostupný až po kontrole textů.</b></p>'; }
     $zdroj = '<a href="' . h((string)$t['zdroj_url']) . '" target="_blank" rel="noopener">' . h((string)$t['zdroj_url']) . '</a>';
-    $r[] = '<p>Zdroj textů: ' . $zdroj . (!empty($p['pasije']) ? ' (včetně pašijí, evangelium v ročním cyklu A/B/C)' : '') . '</p>';
+    $r[] = '<p>Zdroj textů: ' . $zdroj . (!empty($p['pasije']) ? ' (včetně pašijí)' : '') . '</p>';
     if ($web) { $r[] = '<p><a class="tlacitko" href="' . h('?uprava=' . $datum . '&' . nastaveniUrl($cfg)) . '">Zkontrolovat texty</a></p>'; }
     if ($t['zalm_cislo'] !== '') {
         $zalm = '<p>Žalm ' . h($t['zalm_cislo']) . ' – zpívá Honza nebo varhanice Lenka. ';
