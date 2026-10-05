@@ -38,10 +38,10 @@ jeRovno('Velikonoce 2027', $nazev('2027-03-28'), 'Neděle Zmrtvýchvstání Pán
 jeRovno('Letnice 2027', $nazev('2027-05-16'), 'Seslání Ducha Svatého (Letnice)');
 jeRovno('Trojice 2027', $nazev('2027-05-23'), 'Nejsvětější Trojice');
 jeRovno('Václav ve všední den', $nazev('2027-09-28'), 'Sv. Václava, hlavního patrona českého národa');
-jeRovno('Všední den bez slavnosti', $nazev('2026-10-07'), null);
-// Čtyři příští příležitosti po 4. 10. 2026
+jeRovno('Všední den v mezidobí (feriální)', $nazev('2026-10-07'), 'Středa po 27. neděli v mezidobí');
+// Čtyři příští příležitosti od 5. 10. 2026 (včetně všedních dnů v mezidobí)
 $dal = array_map(fn($p) => $p['datum']->format('m-d'), dalsiPrilezitosti($d('2026-10-05'), 4, $cfg));
-jeRovno('příštích 4', $dal, ['10-11', '10-18', '10-25', '11-01']);
+jeRovno('příštích 4', $dal, ['10-05', '10-06', '10-07', '10-08']);
 // Gloria
 jeRovno('Gloria advent', popisDne($d('2026-12-06'), $cfg)['gloria'], false);
 jeRovno('Gloria mezidobí', popisDne($d('2026-10-11'), $cfg)['gloria'], true);
@@ -107,5 +107,38 @@ jeRovno('bohoslužba: titulek s datem', str_contains($html, '<title>Bohoslužba 
 jeRovno('bohoslužba: bez seznamu a sidebaru', str_contains($html, 'class="bocni"'), false);
 jeRovno('bohoslužba: odkaz na kontrolu nese nastavení', str_contains($html, 'href="?uprava=2026-10-18&amp;forma=1&amp;nanebevstoupeni=ctvrtek&amp;bozi_telo=ctvrtek&amp;vsedni=1"'), true);
 jeRovno('bohoslužba: formulář má den, ne počet', [str_contains($html, 'name="den"'), str_contains($html, 'name="pocet"')], [true, false]);
+// Všední dny v mezidobí: stránka týdne NN_0D, feriální cyklus I/II podle roku, bez vyznání a Gloria
+jeRovno('ferie: pondělí po 29. neděli', $nazev('2026-10-19'), 'Pondělí po 29. neděli v mezidobí');
+jeRovno('ferie: soubor týdne', popisDne($d('2026-10-19'), $cfg)['odkaz']['soubor'], '29_01.htm');
+jeRovno('ferie: cyklus II v sudém roce', popisDne($d('2026-10-19'), $cfg)['rok'], 'II');
+jeRovno('ferie: cyklus I v lichém roce', popisDne($d('2027-10-18'), $cfg)['rok'], 'I');
+jeRovno('ferie: soubor 2027', popisDne($d('2027-10-18'), $cfg)['odkaz']['soubor'], '29_01.htm');
+jeRovno('ferie: pondělí 1. týdne po Křtu', $nazev('2026-01-12'), 'Pondělí 1. týdne v mezidobí');
+jeRovno('ferie: úterý před popeleční středou', popisDne($d('2026-02-17'), $cfg)['odkaz']['soubor'], '06_02.htm');
+jeRovno('ferie: popeleční středa není mezidobí', popisDne($d('2026-02-18'), $cfg), null);
+jeRovno('ferie: pondělí po Trojici (týden 9)', popisDne($d('2026-06-01'), $cfg)['odkaz']['soubor'], '09_01.htm');
+jeRovno('ferie: pondělí po Kristu Králi (týden 34)', popisDne($d('2026-11-23'), $cfg)['odkaz']['soubor'], '34_01.htm');
+jeRovno('ferie: pondělí v adventu není', popisDne($d('2026-11-30'), $cfg), null);
+jeRovno('ferie: bez vyznání a Gloria', [popisDne($d('2026-10-19'), $cfg)['kredo'], popisDne($d('2026-10-19'), $cfg)['gloria']], [false, false]);
+jeRovno('neděle v mezidobí: vyznání a Gloria', [popisDne($d('2026-10-18'), $cfg)['kredo'], popisDne($d('2026-10-18'), $cfg)['gloria']], [true, true]);
+// Čtení ze stránky všedního dne: cyklus I/II se vybere podle roku, verš a evangelium jsou společné
+$pf = popisDne($d('2026-10-19'), $cfg); $pf['datum'] = $d('2026-10-19');
+$tf = nactiTexty($pf, $kc);
+jeRovno('ferie II: 1. čtení z cyklu II', str_contains($tf['cteni1']['text'] ?? '', 'cyklu dva'), true);
+jeRovno('ferie II: bez čtení z cyklu I', str_contains($tf['cteni1']['text'] ?? '', 'cyklu jedna'), false);
+jeRovno('ferie: verš bez Aleluja', $tf['verš']['bez_aleluja'] ?? null, 'Testovací verš před evangeliem.');
+jeRovno('ferie: evangelium', str_contains($tf['evangelium']['text'] ?? '', 'všedního dne'), true);
+jeRovno('ferie: vstupní modlitba', str_contains($tf['vstupni'] ?? '', 'všední den'), true);
+$pf1 = popisDne($d('2027-10-18'), $cfg); $pf1['datum'] = $d('2027-10-18');
+$tf1 = nactiTexty($pf1, $kc);
+jeRovno('ferie I: 1. čtení z cyklu I', str_contains($tf1['cteni1']['text'] ?? '', 'cyklu jedna'), true);
+jeRovno('ferie I: bez chyb', $tf1['chyby'], []);
+// Stránka všedního dne: bez vyznání a Gloria, s označením feriálního cyklu
+set_error_handler(function (int $no, string $str) { throw new ErrorException($str, 0, $no); });
+$hf = stranka($pf, $kc);
+restore_error_handler();
+jeRovno('ferie: stránka bez vyznání víry', str_contains($hf, 'Věřím v jednoho Boha'), false);
+jeRovno('ferie: stránka bez Gloria', str_contains($hf, 'Sláva na výsostech'), false);
+jeRovno('ferie: stránka s feriálním cyklem', str_contains($hf, 'feriální cyklus II'), true);
 echo "Hotovo: $ok v pořádku, $chyb chyb.\n";
 exit($chyb ? 1 : 0);

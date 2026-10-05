@@ -4,17 +4,22 @@ Najde příští neděle a slavnosti, stáhne k nim vlastní texty z liturgie.cz
 
 ## Spuštění
 - Web: nahrajte soubor `bohosluzba.php` na PHP hosting (PHP 8.1+, dom, curl nebo allow_url_fopen; složka `cache/` musí být zapisovatelná). Den vyberete v kalendáři ve formuláři nahoře; nastavení jsou na začátku souboru a také ve formuláři.
-  - `bohosluzba.php` (výchozí: nejbližší neděle nebo slavnost od zítřka)
+  - `bohosluzba.php` (výchozí: nejbližší den s bohoslužbou od zítřka)
   - `bohosluzba.php?den=2026-10-18` (konkrétní den)
 - Příkazová řádka: `php bohosluzba.php --den=2026-10-18 --vystup=bohosluzba.html`
 - Test (volitelný): `php test.php` (kalendář a rozbor stránek na ukázkových datech v `test/`); ostatní soubory ke generování nejsou potřeba.
 
 ## Co dělá sám
 - Velikonoce, advent, rok A/B/C, číslo neděle v mezidobí, slavnosti (nastavení v bloku NASTAVENÍ na začátku `bohosluzba.php`).
-- Gloria jen o nedělích mimo advent a půst a o slavnostech/svátcích; krédo vždy kromě vzpomínky na zemřelé.
+- Gloria a vyznání víry jen o nedělích a slavnostech/svátcích (Gloria ne v adventu a postě); všední dny je nemají.
 - V postní době vynechá Aleluja a zpívá jen verš.
-- Druhé čtení vynechá, když ho den nemá.
+- Všední dny v mezidobí: text ze stránky týdne (`NN_0D.htm`). Cyklus čtení je I v lichých letech a II v sudých (kalendářní rok, podle indexu liturgie.cz). Stránka ukáže „feriální cyklus I/II“. Verš a evangelium jsou společné pro oba cykly.
+- Druhé čtení vynechá, když ho den nemá (všední dny ho nemají).
 - U bohoslužby uvede zdroj (adresu stránky na liturgie.cz) v krabičce nad textem; u Květné neděle i odkaz na pašije.
+
+## Zatím chybí
+- Všední dny v adventu, o vánocích, v postě a velikonocích: stránky ještě nejsou napojené. Den se nezobrazí a objeví se hláška s formulářem, takže jde zvolit jiný den.
+- Památky svatých: všední den se bere jako feriální, památka se nezohledňuje.
 
 ## Kontrola a vlastní texty (web)
 - Nad textem je krabička s odkazem „Zkontrolovat texty“ (`bohosluzba.php?uprava=RRRR-MM-DD`).

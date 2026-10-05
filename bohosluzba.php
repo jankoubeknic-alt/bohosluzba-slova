@@ -115,13 +115,30 @@ function obdobiDne(DateTimeImmutable $d): string
 
 function den(string $nazev, array $odkaz, string $hodnost, string $obdobi, string $rok, array $extra = []): array
 {
-    $zesnuli = $hodnost === 'zesnuli';
     return array_merge([
         'nazev' => $nazev, 'odkaz' => $odkaz, 'hodnost' => $hodnost, 'obdobi' => $obdobi, 'rok' => $rok,
-        // Gloria: neděle mimo advent a půst, slavnosti, svátky.
-        'gloria' => !$zesnuli && (in_array($hodnost, ['slavnost', 'svatek'], true) || !in_array($obdobi, ['advent', 'pust'], true)),
-        'kredo' => !$zesnuli,
+        // Gloria: neděle mimo advent a půst, slavnosti, svátky (ne všední dny ani vzpomínky).
+        'gloria' => in_array($hodnost, ['slavnost', 'svatek'], true) || ($hodnost === 'nedele' && !in_array($obdobi, ['advent', 'pust'], true)),
+        // Vyznání víry: jen neděle, slavnosti a svátky (ne všední dny, ne vzpomínka na zemřelé).
+        'kredo' => in_array($hodnost, ['nedele', 'slavnost', 'svatek'], true),
     ], $extra);
+}
+
+/**
+ * Číslo týdne v mezidobí, které nese neděle $s (a jeho všední dny: stránka NN_0D).
+ * Týden po Křtu Páně je 1, po něm 2, 3 … do půstu; po Letnicích se počítá od konce roku (34 = Ježíše Krista Krále).
+ * Null, pokud $s není v mezidobí (advent, vánoce, půst, velikonoce).
+ */
+function cisloTydneMezidobi(DateTimeImmutable $s): ?int
+{
+    $y = (int)$s->format('Y');
+    $diff = dnuOd(velikonoce($y), $s);
+    $adv = adventZacatek($y);
+    $krtu = krtuPane($y);
+    if ($s == $krtu) { return 1; }
+    if ($diff >= 56 && $s < $adv) { return 35 - intdiv(dnuOd($s, $adv), 7); }
+    if ($s > $krtu && $diff < -46) { return 2 + intdiv(dnuOd($krtu, $s) - 1, 7); }
+    return null;
 }
 
 /** Co se slaví dané datum (jen neděle a vybrané slavnosti), nebo null. */
@@ -181,12 +198,8 @@ function popisDne(DateTimeImmutable $d, array $cfg): ?array
         if ($d == $krtu) { return den('Křtu Páně', odkaz('02vanoce', 'KrtuPane.htm'), 'svatek', 'vanoce', $rok); }
         // Mezidobí
         if ($d == $adv->modify('-7 days')) { return den('Ježíše Krista Krále', odkaz('06mezidobi', 'Krista_Krale.htm'), 'slavnost', 'mezidobi', $rok); }
-        if ($diff > 56) {
-            $n = 35 - intdiv(dnuOd($d, $adv), 7);
-            return den("$n. neděle v mezidobí", odkaz('06mezidobi', sprintf('%02d_00.htm', $n)), 'nedele', 'mezidobi', $rok);
-        }
-        if ($d > $krtu && $diff < -46) {
-            $n = 2 + intdiv(dnuOd($krtu, $d) - 1, 7);
+        $n = cisloTydneMezidobi($d);
+        if ($n !== null) {
             return den("$n. neděle v mezidobí", odkaz('06mezidobi', sprintf('%02d_00.htm', $n)), 'nedele', 'mezidobi', $rok);
         }
         return null;
@@ -196,6 +209,15 @@ function popisDne(DateTimeImmutable $d, array $cfg): ?array
     if (in_array($md, $cfg['svatky_ve_vsedni_den'], true) && isset($sl[$md])) {
         [$nazev, $odk, $h] = $sl[$md];
         return den($nazev, $odk, $h, obdobiDne($d), $rok);
+    }
+    // Všední den v mezidobí: stránka týdne NN_0D (D = 1 pondělí … 6 sobota); feriální cyklus I/II podle roku
+    if (obdobiDne($d) === 'mezidobi') {
+        $n = cisloTydneMezidobi($d->modify("-$w days"));
+        if ($n !== null) {
+            $dny = ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota'];
+            $nazev = $n === 1 ? "$dny[$w] 1. týdne v mezidobí" : "$dny[$w] po $n. neděli v mezidobí";
+            return den($nazev, odkaz('06mezidobi', sprintf('%02d_%02d.htm', $n, $w)), 'ferie', 'mezidobi', $y % 2 === 1 ? 'I' : 'II');
+        }
     }
     // Slavnost připadla na neděli adventní/postní/velikonoční → přesunuta na pondělí
     if ($w === 1) {
@@ -317,13 +339,14 @@ function korejsOdkaz(string $citace, string $rok, string $prilezitost, array $cf
 {
     if (!preg_match('~^Žl?\s*(\d+)\s*(?:\(\d+\))?\s*,?\s*(.*)$~u', trim($citace), $m)) { return null; }
     $verse = preg_replace('~\s+|Odp.*$~u', '', $m[2]);
+    $kKorejs = ['I' => '1', 'II' => '2'][$rok] ?? $rok; // všední dny: feriální cyklus I/II je na Korejsovi 1/2
     $nejlepsi = null; $skore = -1;
     foreach (nactiKorejs($cfg) as $r) {
         if (!preg_match('~^Žl?\s*(\d+)~u', $r['bibl'], $mb) || $mb[1] !== $m[1]) { continue; }
         $s = 0;
         if ($verse !== '' && preg_replace('~\s+~u', '', $r['verse']) === $verse) { $s += 4; }
         if ($r['prilezitost'] === $prilezitost) { $s += 2; }
-        if ($rok !== '' && str_contains($r['cyklus'], $rok)) { $s += 1; }
+        if ($kKorejs !== '' && str_contains($r['cyklus'], $kKorejs)) { $s += 1; }
         if ($s > $skore) { $skore = $s; $nejlepsi = $r; }
     }
     return $nejlepsi['url'] ?? null;
@@ -446,9 +469,13 @@ function vyberCteni(array $sekce, string $rok): array
     $spolecne = []; $podleRoku = []; $aktRok = null;
     foreach ($sekce as $s) {
         if (preg_match('~v roce ([ABC])\b~u', $s['nazev'], $m)) { $aktRok = $m[1]; continue; }
+        // Všední dny: dva rozbalovací cykly (feriální I a II); verš a evangelium jsou společné
+        if (preg_match('~^Roční cyklus ([12])$~u', $s['nazev'], $m)) { $aktRok = $m[1] === '1' ? 'I' : 'II'; continue; }
         $typ = typSekce($s['nazev']);
         if ($typ !== null) {
-            if ($aktRok !== null) { $podleRoku[$aktRok][$typ] = $s; } else { $spolecne[$typ] = $s; }
+            if ($aktRok !== null && !(in_array($aktRok, ['I', 'II'], true) && in_array($typ, ['verš', 'evangelium'], true))) {
+                $podleRoku[$aktRok][$typ] = $s;
+            } else { $spolecne[$typ] = $s; }
         } elseif ($s['uroven'] <= 4 && $s['uroven'] > 0 && $aktRok !== null) {
             $aktRok = null; // konec bloku čtení (Vyznání víry, Modlitba nad dary ...)
         }
@@ -738,11 +765,17 @@ function radkyZaver(): array
 }
 
 /** Jedna bohoslužba (bez <html> obalu). */
+/** Označení cyklu do výstupu: liturgický rok A/B/C u neděl a slavností, feriální cyklus I/II u všedních dnů. */
+function oznaceniRoku(array $p): string
+{
+    return in_array($p['rok'], ['I', 'II'], true) ? 'feriální cyklus ' . $p['rok'] : 'liturgický rok ' . $p['rok'];
+}
+
 function bohosluzbaHtml(array $p, array $t): string
 {
     $hlava = '<header id="text"><h2>' . h($p['nazev']) . '</h2>'
-        . '<p class="datum">' . h(cesDatum($p['datum'])) . ' · liturgický rok ' . h($p['rok']) . '</p>';
-    $hlava .= '<p class="zdroj">Zdroj textů: <a href="' . h((string)$t['zdroj_url']) . '">' . h((string)$t['zdroj_url']) . '</a> (Český misál a Mešní lekcionář, © ČBK; vybráno podle roku ' . h($p['rok']) . ').</p>';
+        . '<p class="datum">' . h(cesDatum($p['datum'])) . ' · ' . h(oznaceniRoku($p)) . '</p>';
+    $hlava .= '<p class="zdroj">Zdroj textů: <a href="' . h((string)$t['zdroj_url']) . '">' . h((string)$t['zdroj_url']) . '</a> (Český misál a Mešní lekcionář, © ČBK; vybráno pro ' . h(oznaceniRoku($p)) . ').</p>';
     if ($t['chyby']) {
         $hlava .= '<p class="chyba"><b>Pozor:</b> ' . h(implode('; ', $t['chyby'])) . '. Doplňte ručně nebo zkontrolujte stránku na liturgie.cz.</p>';
     }
@@ -933,7 +966,7 @@ function upravaStranka(DateTimeImmutable $d, array $cfg): string
             . '<label><input type="checkbox" name="ok[' . $klic . ']" value="1"> Sedí, text jsem zkontroloval</label></section>';
     }
     return "<!doctype html>\n<html lang=\"cs\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>Kontrola textů $datum</title>\n<style>" . CSS . UPRAVA_CSS . "</style>\n</head>\n<body>\n"
-        . '<h1>Kontrola textů: ' . h(cesDatum($d)) . '</h1><p class="datum">' . h($p['nazev']) . ' · liturgický rok ' . h($p['rok']) . '</p>'
+        . '<h1>Kontrola textů: ' . h(cesDatum($d)) . '</h1><p class="datum">' . h($p['nazev']) . ' · ' . h(oznaceniRoku($p)) . '</p>'
         . '<p class="zdroj">Zdroj: <a href="' . h((string)$t['zdroj_url']) . '" target="_blank" rel="noopener">' . h((string)$t['zdroj_url']) . '</a>. Porovnejte každou část se zdrojem. Co sedí, zaškrtněte. Co nesedí, napište do políčka „Vlastní text“. Texty se nikam neukládají, použijí se jen v bohoslužbě, kterou tlačítkem vytvoříte.</p>'
         . '<form method="post" action="' . h('?den=' . $datum . '&' . nastaveniUrl($cfg)) . '"><p><button type="button" onclick="document.querySelectorAll(\'form input[type=checkbox]\').forEach(function(c){c.checked=true;})">Všechno sedí</button></p>' . $casti
         . '<p><button>Vytvořit bohoslužbu s těmito texty (k tisku)</button> <a href="' . h('?den=' . $datum . '&' . nastaveniUrl($cfg)) . '">Bohoslužbu bez úprav</a></p></form>'
@@ -983,7 +1016,7 @@ function bsHlavni(array $CFG): void
         if ($platne($arg['den'] ?? null)) {
             $den = new DateTimeImmutable($arg['den']);
         } else {
-            // Bez data: nejbližší neděle nebo slavnost od zítřka (od dneška podle nastavení)
+            // Bez data: nejbližší den, který má bohoslužbu slova, od zítřka (od dneška podle nastavení)
             $od = new DateTimeImmutable($cfg['vcetne_dnes'] ? 'today' : 'tomorrow');
             $den = dalsiPrilezitosti($od, 1, $cfg)[0]['datum'];
         }
