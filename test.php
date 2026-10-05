@@ -145,6 +145,12 @@ $pf1 = popisDne($d('2027-10-18'), $cfgDny); $pf1['datum'] = $d('2027-10-18');
 $tf1 = nactiTexty($pf1, $kc);
 jeRovno('ferie I: 1. čtení z cyklu I', str_contains($tf1['cteni1']['text'] ?? '', 'cyklu jedna'), true);
 jeRovno('ferie I: bez chyb', $tf1['chyby'], []);
+// Svátky ve všední den se nabízejí (výchozí seznam z NASTAVENÍ), ne jako všední dny
+$cfgSvatky = $cfgDny; $cfgSvatky['svatky_ve_vsedni_den'] = $CFG['svatky_ve_vsedni_den'];
+jeRovno('svátek: Proměnění ve všední den', popisDne($d('2026-08-06'), $cfgSvatky)['nazev'] ?? null, 'Proměnění Páně');
+jeRovno('svátek: Povýšení kříže ve všední den', popisDne($d('2026-09-14'), $cfgSvatky)['nazev'] ?? null, 'Povýšení svatého Kříže');
+jeRovno('svátek: Posvěcení lateránské baziliky', popisDne($d('2026-11-09'), $cfgSvatky)['hodnost'] ?? null, 'svatek');
+jeRovno('svátek: Uvedení Páně do chrámu', popisDne($d('2026-02-02'), $cfgSvatky)['odkaz']['slozka'] ?? null, '08sanctoral');
 // Adventní všední den: hlavní čtení je první, volitelné „v cyklu A“ se nebere, „Čte-li se …“ se neukáže
 $pa = popisDne($d('2026-11-30'), $cfgDny); $pa['datum'] = $d('2026-11-30');
 $ta = nactiTexty($pa, $kc);

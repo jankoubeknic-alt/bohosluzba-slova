@@ -23,9 +23,9 @@ $CFG = [
     'nanebevstoupeni' => 'ctvrtek',          // 'ctvrtek' (všední den) nebo 'nedele' (přeneseno na neděli)
     'bozi_telo' => 'ctvrtek',                // 'ctvrtek' nebo 'nedele'
     'slavnosti_ve_vsedni_den' => true,       // true = nabízet i slavnosti ve všední dny; false = jen neděle
-    // Které slavnosti ve všední den (měsíc-den) se nabízejí. Co nechcete, smažte.
-    'svatky_ve_vsedni_den' => ['12-25', '01-01', '01-06', '03-19', '03-25', '06-24', '06-29',
-                               '07-05', '08-15', '09-28', '11-01', '11-02', '12-08'],
+    // Které slavnosti a svátky ve všední den (měsíc-den) se nabízejí. Co nechcete, smažte.
+    'svatky_ve_vsedni_den' => ['12-25', '01-01', '01-06', '02-02', '03-19', '03-25', '06-24', '06-29',
+                               '07-05', '08-06', '08-15', '09-14', '09-28', '11-01', '11-02', '11-09', '12-08'],
     'vcetne_dnes' => false,                  // false = hledat od zítřka, true = od dneška
     'casove_pasmo' => 'Europe/Prague',
 ];

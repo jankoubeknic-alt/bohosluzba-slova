@@ -14,6 +14,7 @@ Najde příští neděle a slavnosti, stáhne k nim vlastní texty z liturgie.cz
 - Gloria a vyznání víry jen o nedělích a slavnostech/svátcích (Gloria ne v adventu a postě); všední dny je nemají.
 - V postní době vynechá Aleluja a zpívá jen verš.
 - Všední dny v mezidobí: text ze stránky týdne (`NN_0D.htm`). Cyklus čtení je I v lichých letech a II v sudých (kalendářní rok, podle indexu liturgie.cz). Stránka ukáže „feriální cyklus I/II“. Verš a evangelium jsou společné pro oba cykly.
+- Svátky (2. 2., 6. 8., 14. 9., 9. 11.) se nabízejí i ve všední den; seznam je v `svatky_ve_vsedni_den` v NASTAVENÍ.
 - Všední dny v adventu (do 16. 12. podle týdne, 17.–24. 12. podle data), o vánocích (29.–31. 12., 2.–5. 1., 7.–12. 1.), v postě (Popeleční středa, týdny, Svatý týden po pondělí až středu) a o velikonocích (oktáv, týdny). Mají jedno čtení bez cyklu. Volitelné varianty (např. „1. čtení v cyklu A“) se nebere, použije se hlavní čtení.
 - Vstupní modlitba o vánocích má dvě znění podle data: před slavností Zjevení Páně (do 6. 1.), po ní (od 7. 1.).
 - Druhé čtení vynechá, když ho den nemá (všední dny ho nemají).
