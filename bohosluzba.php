@@ -1,13 +1,15 @@
 <?php
 declare(strict_types=1);
 /**
- * Generátor Bohoslužby slova: jediný soubor, vše nastavitelné hned níže.
+ * Generátor Bohoslužby slova: jediný soubor (generátor, web, CLI i vestavěné testy).
+ * Texty © ČBK / liturgie.cz se stahují do cache/ a do repozitáře nepatří. Podrobnosti: README.md.
  *
- *   Web:  bohosluzba.php                      (výběr dne v kalendáři + výstup)
- *         bohosluzba.php?den=2026-10-18
- *   CLI:  php bohosluzba.php --den=2026-10-18 --vystup=bohosluzba.html
+ *   Web:    bohosluzba.php                        (výběr dne v kalendáři + výstup)
+ *           bohosluzba.php?den=2026-10-18
+ *   CLI:    php bohosluzba.php --den=2026-10-18 --vystup=bohosluzba.html [--zformular=2]
+ *   Testy:  php bohosluzba.php --test
  *
- * Přepínače lze změnit tady, nebo ve webovém formuláři / v adrese (adresa má přednost).
+ * Přepínače lze změnit v bloku NASTAVENÍ níže, nebo ve webovém formuláři / v adrese (adresa má přednost).
  */
 
 // ======================= NASTAVENÍ =======================
@@ -31,6 +33,7 @@ $CFG = [
                                '12-26', '12-27', '12-28'],
     // Památky svatých ve všední den: 'povinne' = jen povinné (mají texty na liturgie.cz), 'vsechny' i nepovinné (jen pokud mají stránku)
     'vzpominky' => 'povinne',
+    'zesnuli_formular' => 1,                 // vzpomínka na zemřelé (2. 11.) má 3 mešní formuláře: 1, 2 nebo 3 (vstupní a po přijímání)
     'vcetne_dnes' => false,                  // false = hledat od zítřka, true = od dneška
     'casove_pasmo' => 'Europe/Prague',
 ];
@@ -906,6 +909,18 @@ function rozborVerse(array $s): array
     return ['citace' => $citace, 'text' => $text, 'bez_aleluja' => $bezAleluja];
 }
 
+/** Sekce jednoho mešního formuláře (vzpomínka na zemřelé): od „N. mešní formulář“ do dalšího formuláře nebo „Preface“. */
+function blokFormulare(array $sekce, int $n): array
+{
+    $blok = []; $v = false;
+    foreach ($sekce as $s) {
+        if (preg_match('~^(\d)\. mešní formulář~iu', $s['nazev'], $m)) { if ($v) { break; } $v = (int)$m[1] === $n; continue; }
+        if ($v && preg_match('~^Preface~iu', $s['nazev'])) { break; }
+        if ($v) { $blok[] = $s; }
+    }
+    return $blok;
+}
+
 /**
  * Čtení velikonoční vigilie: 1.–7. čtení s žalmy a modlitbami, pak epištola s žalmem.
  * Evangelium se nebere tady (vybírá se podle roku A/B/C jako jinde).
@@ -988,8 +1003,15 @@ function nactiTexty(array $prilezitost, array $cfg): array
         if (empty($vysl['evangelium'])) { $vysl['chyby'][] = 'chybí: evangelium'; }
         return $vysl;
     }
-    // Obřad zesnulých (2. 11.) má více mešních formulářů s různými čteními; na jejich výběr se neodhaduje
+    // Obřad zesnulých (2. 11.) má tři mešní formuláře. Vstupní modlitbu a modlitbu po přijímání bereme z vybraného;
+    // čtení a evangelia k formulářům na stránce navázaná nejsou, ty se doplní z feriálního dne.
     $zesnuli = ($prilezitost['hodnost'] ?? '') === 'zesnuli';
+    if ($zesnuli) {
+        $vysl['formular'] = max(1, min(3, (int)($cfg['zesnuli_formular'] ?? 1)));
+        $blok = blokFormulare($sekce, $vysl['formular']);
+        $vysl['vstupni'] = sekceTextu($blok, '~^Vstupní modlitba~iu') ?? $vysl['vstupni'];
+        $vysl['po_prijimani'] = sekceTextu($blok, '~^Modlitba po přijímání~iu') ?? $vysl['po_prijimani'];
+    }
     $vyber = $zesnuli ? [] : vyberCteni($sekce, $prilezitost['rok']);
     if (!$zesnuli && empty($vyber['cteni1'])) { $vyber['cteni1'] = prvniNabidkaCteni($sekce); }
     if ($vyber['cteni1'] ?? null) { $vysl['cteni1'] = rozborCteni($vyber['cteni1']); }
@@ -1238,7 +1260,7 @@ function bohosluzbaHtml(array $p, array $t): string
         $hlava .= '<p class="chyba"><b>Pozor:</b> ' . h(implode('; ', $t['chyby'])) . '. Doplňte ručně nebo zkontrolujte stránku na liturgie.cz.</p>';
     }
     if ($p['hodnost'] === 'zesnuli') {
-        $hlava .= '<p class="chyba"><b>Pozor:</b> vzpomínka na zemřelé má tři mešní formuláře s různými čteními a evangelii. Čtení jsou z feriálního dne; formulář vyberte v misálu, nebo vlastní texty zadejte v kontrole.</p>';
+        $hlava .= '<p class="chyba"><b>Pozor:</b> vzpomínka na zemřelé má tři mešní formuláře. Vstupní modlitba a modlitba po přijímání jsou z ' . (int)($t['formular'] ?? 1) . '. formuláře (volba v nastavení). Čtení a evangelium jsou z feriálního dne; vlastní texty zadejte v kontrole.</p>';
     }
     if (!empty($t['doplneno'])) {
         $hlava .= '<p class="zdroj"><b>Doplněno z feriálního dne:</b> ' . h(implode(', ', $t['doplneno'])) . '. Misál pro bohoslužbu slova doporučuje čtení ze dne; vlastní texty zadejte v kontrole.</p>';
@@ -1314,7 +1336,7 @@ function stranka(array $p, array $cfg, bool $web = false, ?array $upravy = null,
 function nastaveniUrl(array $cfg): string
 {
     return 'forma=1&nanebevstoupeni=' . $cfg['nanebevstoupeni'] . '&bozi_telo=' . $cfg['bozi_telo']
-        . ($cfg['slavnosti_ve_vsedni_den'] ? '&vsedni=1' : '');
+        . '&zformular=' . $cfg['zesnuli_formular'] . ($cfg['slavnosti_ve_vsedni_den'] ? '&vsedni=1' : '');
 }
 
 /**
@@ -1481,6 +1503,7 @@ function formular(array $cfg, string $den): string
         . '<div class="radek">Den bohoslužby <input type="date" name="den" value="' . h($den) . '"></div>'
         . '<div class="radek">Nanebevstoupení <select name="nanebevstoupeni"><option value="ctvrtek"' . $sel('nanebevstoupeni', 'ctvrtek') . '>ve čtvrtek</option><option value="nedele"' . $sel('nanebevstoupeni', 'nedele') . '>v neděli</option></select></div>'
         . '<div class="radek">Boží Tělo <select name="bozi_telo"><option value="ctvrtek"' . $sel('bozi_telo', 'ctvrtek') . '>ve čtvrtek</option><option value="nedele"' . $sel('bozi_telo', 'nedele') . '>v neděli</option></select></div>'
+        . '<div class="radek">Vzpomínka na zemřelé (2. 11.): formulář <select name="zformular">' . implode('', array_map(fn($n) => '<option value="' . $n . '"' . ($cfg['zesnuli_formular'] === $n ? ' selected' : '') . '>' . $n . '. mešní formulář</option>', [1, 2, 3])) . '</select></div>'
         . '<div class="radek"><label><input type="checkbox" name="vsedni" value="1"' . ($cfg['slavnosti_ve_vsedni_den'] ? ' checked' : '') . '> slavnosti i ve všední dny</label></div>'
         . '<div class="radek"><button>Vytvořit</button></div></form>';
 }
@@ -1498,6 +1521,7 @@ function bsHlavni(array $CFG): void
     foreach (['nanebevstoupeni', 'bozi_telo'] as $k) {
         if (isset($arg[$k]) && in_array($arg[$k], ['ctvrtek', 'nedele'], true)) { $cfg[$k] = $arg[$k]; }
     }
+    if (isset($arg['zformular']) && in_array((int)$arg['zformular'], [1, 2, 3], true)) { $cfg['zesnuli_formular'] = (int)$arg['zformular']; }
     if ($web && isset($_GET['forma'])) { $cfg['slavnosti_ve_vsedni_den'] = isset($_GET['vsedni']); }
     elseif (isset($arg['vsedni'])) { $cfg['slavnosti_ve_vsedni_den'] = $arg['vsedni'] !== '0'; }
     if (!$cfg['slavnosti_ve_vsedni_den']) { $cfg['svatky_ve_vsedni_den'] = []; }
@@ -1534,4 +1558,477 @@ function bsHlavni(array $CFG): void
     echo $html;
 }
 
-if (!defined('BS_KNIHOVNA')) { bsHlavni($CFG); }
+// ======================= TESTY (vestavěné) =======================
+// Spuštění: php bohosluzba.php --test. Ověřuje kalendář, rozbor stránek a bohoslužby na syntetických ukázkách
+// (žádný text z liturgie.cz). Ukázky se zapíšou do dočasné složky a po testech se smažou.
+
+function jeRovno($pop, $skut, $oc) { global $ok, $chyb; if ($skut === $oc) { $ok++; } else { $chyb++; echo "CHYBA: $pop: čekáno ", var_export($oc, true), ", je ", var_export($skut, true), "\n"; } }
+
+/** Syntetické ukázky stránek (relativně ke složce testů). */
+function testovaciSoubory(): array
+{
+    return [
+        'korejs/podlelekcionare.html' => <<<'HTML'
+<html><head><meta charset="utf-8"></head><body><table>
+<tr><td><a href="zalmy/TestPs080_05.pdf">TestPs080_05</a></td><td>ID_T1</td><td>Žl 80(79)</td><td>9+12.13-14.15-16.19-20</td><td>1A</td><td>1</td><td>Mezidobí</td><td>27. neděle v mezidobí</td><td>A</td><td>1</td><td>4</td><td>1</td></tr>
+<tr><td><a href="zalmy/TestPs080_03.pdf">TestPs080_03</a></td><td>ID_T2</td><td>Žl 80(79)</td><td>2ac+3b.15-16.18-19</td><td>1B</td><td>2</td><td>Advent</td><td>1. neděle adventní</td><td>B</td><td>1</td><td>2</td><td>2</td></tr>
+<tr><td><a href="zalmy/TestPs080_03c.pdf">TestPs080_03c</a></td><td>ID_T3</td><td>Žl 80(79)</td><td>2ac+3b.15-16.18-19</td><td>1C</td><td>3</td><td>Advent</td><td>4. neděle adventní</td><td>C</td><td>1</td><td>2</td><td>3</td></tr>
+</table></body></html>
+HTML,
+
+        'misal/01advent/01_01.htm' => <<<'HTML'
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Pondělí po 1. neděli adventní - testovací data</title>
+</head>
+<body>
+<h3>Pondělí po 1. neděli adventní</h3>
+<h4>Vstupní modlitba</h4>
+<p>Testovací vstupní modlitba adventního dne.</p>
+<h4>1. čtení - Test 2,1-5</h4>
+<p><em>Podtitul testovacího čtení.</em></p>
+<p>Čtení z testovací knihy.</p>
+<p>Testovací hlavní čtení adventního dne.</p>
+<p class="red">Čte-li se toto čtení na 1. neděli adventní (v ročním cyklu A), může se dnes vzít:</p>
+<p onclick="zobrazSkryj('oddilA')"><button>1. čtení v cyklu A</button></p>
+<div id="oddilA" class="skryvany">
+<H4>1. čtení - Test 4,2-6</H4>
+<p>Testovací alternativní čtení, které se nemá číst jako hlavní.</p>
+</div>
+<h4>Mezizpěv - Žl 122,1-2</h4>
+<p><em>Testovací refrén adventní.</em></p>
+<p>Testovací sloka adventní.</p>
+<h4>Zpěv před evangeliem</h4>
+<p>Aleluja. Testovací verš adventní. Aleluja.</p>
+<h4>Evangelium - Test 8,5-11</h4>
+<p>Čtení ze svatého evangelia.</p>
+<p>Testovací evangelium adventní.</p>
+<h4>Modlitba po přijímání</h4>
+<p>Testovací modlitba po přijímání adventní.</p>
+</body>
+</html>
+HTML,
+
+        'misal/04triduum/04vigilie_2.htm' => <<<'HTML'
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Velikonoční vigilie - testovací data</title>
+</head>
+<body>
+<h3>Velikonoční vigilie</h3>
+<h3>Bohoslužba slova</h3>
+<h4>1. čtení – Test 1,1-2</h4>
+<p>Čtení z testovací knihy.</p>
+<p>Testovací první čtení vigilie.</p>
+<h4>Mezizpěv – Žl 104,1-2a.5-6</h4>
+<p><em>Testovací refrén vigilie.</em></p>
+<p>Testovací sloka vigilie.</p>
+<h4>Modlitba</h4>
+<p>Testovací modlitba po prvním čtení.</p>
+<h4>2. čtení – Test 2,1-2</h4>
+<p>Čtení z testovací knihy.</p>
+<p>Testovací druhé čtení vigilie.</p>
+<h4>Mezizpěv – Žl 16,5.8-9</h4>
+<p>Testovací sloka druhého žalmu.</p>
+<h4>Modlitba</h4>
+<p>Testovací modlitba po druhém čtení.</p>
+<h4>3. čtení – Test 3,1-2</h4>
+<p>Testovací třetí čtení vigilie.</p>
+<h4>Mezizpěv – Žl 19,8.9</h4>
+<p>Testovací sloka třetího žalmu.</p>
+<h4>Modlitba</h4>
+<p>Testovací modlitba po třetím čtení.</p>
+<h4>4. čtení – Test 4,1-2</h4>
+<p>Testovací čtvrté čtení vigilie.</p>
+<h4>Mezizpěv – Žl 30,2.4</h4>
+<p>Testovací sloka čtvrtého žalmu.</p>
+<h4>Modlitba</h4>
+<p>Testovací modlitba po čtvrtém čtení.</p>
+<h4>5. čtení – Test 5,1-2</h4>
+<p>Testovací páté čtení vigilie.</p>
+<h4>Mezizpěv – Žl 12,4</h4>
+<p>Testovací sloka pátého žalmu.</p>
+<h4>Modlitba</h4>
+<p>Testovací modlitba po pátém čtení.</p>
+<h4>6. čtení – Test 6,1-2</h4>
+<p>Testovací šesté čtení vigilie.</p>
+<h4>Mezizpěv – Žl 42,3.5</h4>
+<p>Testovací sloka šestého žalmu.</p>
+<h4>Modlitba</h4>
+<p>Testovací modlitba po šestém čtení.</p>
+<h4>7. čtení – Test 7,1-2</h4>
+<p>Testovací sedmé čtení vigilie.</p>
+<h4>Mezizpěv – Žl 51,12</h4>
+<p>Testovací sloka sedmého žalmu.</p>
+<h4>Modlitba</h4>
+<p>Testovací modlitba po sedmém čtení.</p>
+<h4>Epištola – Test 8,3-11</h4>
+<p>Testovací epištola vigilie.</p>
+<h4>Mezizpěv – Žl 118,1-2</h4>
+<p>Testovací sloka závěrečného žalmu.</p>
+<button>Evangelium v roce A</button>
+<h4>Evangelium v cyklu A – Test 9,1-10</h4>
+<p>Testovací evangelium roku A.</p>
+<button>Evangelium v roce B</button>
+<h4>Evangelium v cyklu B – Test 9,11-20</h4>
+<p>Testovací evangelium roku B.</p>
+<button>Evangelium v roce C</button>
+<h4>Evangelium v cyklu C – Test 9,21-30</h4>
+<p>Testovací evangelium roku C.</p>
+<button>Následuje křestní bohoslužba</button>
+</body>
+</html>
+HTML,
+
+        'misal/06mezidobi/28_00.htm' => base64_decode('PGh0bWw+PGhlYWQ+PG1ldGEgaHR0cC1lcXVpdj0iQ29udGVudC1UeXBlIiBjb250ZW50PSJ0ZXh0L2h0bWw7IGNoYXJzZXQ9d2luZG93cy0xMjUwIj48dGl0bGU+eDwvdGl0bGU+PC9oZWFkPjxib2R5PjxoMz4yOC4gTkVEzExFIFYgTUVaSURPQs08L2gzPjxoND5Wc3R1cG7tIGFudGlmb25hPC9oND48cD5BbnRpZm9uYS48L3A+PGg0PlZzdHVwbu0gbW9kbGl0YmE8L2g0PjxwPlRlc3RvdmFj7SB2c3R1cG7tIG1vZGxpdGJhIDI4LiBuZWTsbGUuIFNrcnplIG5hmmVobyBQ4W5hLjwvcD48cD5BbWVuLjwvcD48aDQ+yHRlbu0geiBQ7XNtYSBwb2RsZSByb+hu7WhvIGN5a2x1PC9oND48aDQ+yHRlbu0geiBQ7XNtYSB2IHJvY2UgQTwvaDQ+CjxoND4xLiDodGVu7TwvaDQ+PHA+SXogMSwxLTI8L3A+PHA+PGk+MS4g6HRlbu08L2k+PC9wPjxwPsh0ZW7tIHoga25paHkgdGVzdG92YWPtIEE8L3A+PHA+VGVzdG92YWPtIHBydm7tIOh0ZW7tIEEsIHbsdGEgamVkbmEuIFbsdGEgZHbsLjwvcD48cD5TbG92byBCb57tLjwvcD4KPGg0Pk1leml6cOx2PC9oND48cD6ObCAyMyAoMjIpLCAxLTNhLjNiLTQuNS02PC9wPjxwPjxpPltUZXN0b3ZhY+0gb2Rwb3bs7yBBLl08L2k+PC9wPjxwPlNsb2thIGplZG5hIEEsPGJyPmRydWj9IPjhZGVrLjwvcD48cD5TbG9rYSBkduwgQSw8YnI+ZHJ1aP0g+OFkZWsuPC9wPgo8aDQ+Mi4g6HRlbu08L2g0PjxwPkZpbCA0LDYtOTwvcD48cD7IdGVu7SB6IGxpc3R1IHRlc3RvdmFj7WhvIEE8L3A+PHA+VGVzdG92YWPtIGRydWjpIOh0ZW7tIEEuPC9wPjxwPlNsb3ZvIEJvnu0uPC9wPgo8aDQ+WnDsdiBw+GVkIGV2YW5nZWxpZW08L2g0PjxwPkVmIDEsMTc8L3A+PHA+QWxlbHVqYS4gVGVzdG92YWPtIHZlcpogQS4gQWxlbHVqYS48L3A+CjxoND5FdmFuZ2VsaXVtPC9oND48cD5NdCAyMSwzMy00MzwvcD48cD5TbG92YSBzdmF06WhvIGV2YW5nZWxpYSBwb2RsZSBUZXN0YSBBPC9wPjxwPlRlc3RvdmFj7SBldmFuZ2VsaXVtIEEuPC9wPjxwPlNsb3ZvIFDhbuwuPC9wPgo8aDQ+yHRlbu0geiBQ7XNtYSB2IHJvY2UgQjwvaDQ+CjxoND4xLiDodGVu7TwvaDQ+PHA+SXogMSwxLTI8L3A+PHA+PGk+MS4g6HRlbu08L2k+PC9wPjxwPsh0ZW7tIHoga25paHkgdGVzdG92YWPtIEI8L3A+PHA+VGVzdG92YWPtIHBydm7tIOh0ZW7tIEIsIHbsdGEgamVkbmEuIFbsdGEgZHbsLjwvcD48cD5TbG92byBCb57tLjwvcD4KPGg0Pk1leml6cOx2PC9oND48cD6ObCAyMyAoMjIpLCAxLTNhLjNiLTQuNS02PC9wPjxwPjxpPltUZXN0b3ZhY+0gb2Rwb3bs7yBCLl08L2k+PC9wPjxwPlNsb2thIGplZG5hIEIsPGJyPmRydWj9IPjhZGVrLjwvcD48cD5TbG9rYSBkduwgQiw8YnI+ZHJ1aP0g+OFkZWsuPC9wPgo8aDQ+Mi4g6HRlbu08L2g0PjxwPkZpbCA0LDYtOTwvcD48cD7IdGVu7SB6IGxpc3R1IHRlc3RvdmFj7WhvIEI8L3A+PHA+VGVzdG92YWPtIGRydWjpIOh0ZW7tIEIuPC9wPjxwPlNsb3ZvIEJvnu0uPC9wPgo8aDQ+WnDsdiBw+GVkIGV2YW5nZWxpZW08L2g0PjxwPkVmIDEsMTc8L3A+PHA+QWxlbHVqYS4gVGVzdG92YWPtIHZlcpogQi4gQWxlbHVqYS48L3A+CjxoND5FdmFuZ2VsaXVtPC9oND48cD5NdCAyMSwzMy00MzwvcD48cD5TbG92YSBzdmF06WhvIGV2YW5nZWxpYSBwb2RsZSBUZXN0YSBCPC9wPjxwPlRlc3RvdmFj7SBldmFuZ2VsaXVtIEIuPC9wPjxwPlNsb3ZvIFDhbuwuPC9wPgo8aDQ+yHRlbu0geiBQ7XNtYSB2IHJvY2UgQzwvaDQ+CjxoND4xLiDodGVu7TwvaDQ+PHA+SXogMSwxLTI8L3A+PHA+PGk+MS4g6HRlbu08L2k+PC9wPjxwPsh0ZW7tIHoga25paHkgdGVzdG92YWPtIEM8L3A+PHA+VGVzdG92YWPtIHBydm7tIOh0ZW7tIEMsIHbsdGEgamVkbmEuIFbsdGEgZHbsLjwvcD48cD5TbG92byBCb57tLjwvcD4KPGg0Pk1leml6cOx2PC9oND48cD6ObCAyMyAoMjIpLCAxLTNhLjNiLTQuNS02PC9wPjxwPjxpPltUZXN0b3ZhY+0gb2Rwb3bs7yBDLl08L2k+PC9wPjxwPlNsb2thIGplZG5hIEMsPGJyPmRydWj9IPjhZGVrLjwvcD48cD5TbG9rYSBkduwgQyw8YnI+ZHJ1aP0g+OFkZWsuPC9wPgo8aDQ+Mi4g6HRlbu08L2g0PjxwPkZpbCA0LDYtOTwvcD48cD7IdGVu7SB6IGxpc3R1IHRlc3RvdmFj7WhvIEM8L3A+PHA+VGVzdG92YWPtIGRydWjpIOh0ZW7tIEMuPC9wPjxwPlNsb3ZvIEJvnu0uPC9wPgo8aDQ+WnDsdiBw+GVkIGV2YW5nZWxpZW08L2g0PjxwPkVmIDEsMTc8L3A+PHA+QWxlbHVqYS4gVGVzdG92YWPtIHZlcpogQy4gQWxlbHVqYS48L3A+CjxoND5FdmFuZ2VsaXVtPC9oND48cD5NdCAyMSwzMy00MzwvcD48cD5TbG92YSBzdmF06WhvIGV2YW5nZWxpYSBwb2RsZSBUZXN0YSBDPC9wPjxwPlRlc3RvdmFj7SBldmFuZ2VsaXVtIEMuPC9wPjxwPlNsb3ZvIFDhbuwuPC9wPgo8aDQ+Vnl6buFu7SB27XJ5PC9oND48cD5W7PjtbS4uLjwvcD48aDQ+TW9kbGl0YmEgbmFkIGRhcnk8L2g0PjxwPkRhcnkuPC9wPjxoND5Nb2RsaXRiYSBwbyBw+Glq7W3hbu08L2g0PjxwPlRlc3RvdmFj7SBtb2RsaXRiYSBwbyBw+Glq7W3hbu0uIFNrcnplIEtyaXN0YS48L3A+PHA+QW1lbi48L3A+PC9ib2R5PjwvaHRtbD4='),
+
+        'misal/06mezidobi/29_01.htm' => <<<'HTML'
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>29. týden v mezidobí - testovací data</title>
+</head>
+<body>
+<h3>Pondělí po 29. neděli v mezidobí</h3>
+<h4>Vstupní antifona – Žl 1,1</h4>
+<p><em>Testovací vstupní antifona.</em></p>
+<h4>Vstupní modlitba</h4>
+<p>Testovací vstupní modlitba pro všední den. Prosíme o to skrze tvého Syna ...</p>
+<h4>První čtení a žalm podle ročního cyklu</h4>
+<p onclick="zobrazSkryj('oddil1')"><button>Roční cyklus 1</button></p>
+<div id="oddil1" class="skryvany">
+<h4>1. čtení – Test 1,1-2</h4>
+<p><em>Čtení z testovací knihy.</em></p>
+<p>Testovací první čtení cyklu jedna. Věta dvě.</p>
+<h4>Mezizpěv – Lk 1,69-70</h4>
+<p><em>Testovací refrén cyklu jedna.</em></p>
+<p>Testovací sloka cyklu jedna.</p>
+</div>
+<p onclick="zobrazSkryj('oddil2')"><button>Roční cyklus 2</button></p>
+<div id="oddil2" class="skryvany">
+<h4>1. čtení – Test 2,1-2</h4>
+<p><em>Čtení z testovací knihy.</em></p>
+<p>Testovací první čtení cyklu dva. Věta dvě.</p>
+<h4>Mezizpěv – Žl 100,2.3</h4>
+<p><em>Testovací refrén cyklu dva.</em></p>
+<p>Testovací sloka cyklu dva.</p>
+</div>
+<h4>Zpěv před evangeliem – Mt 5,3</h4>
+<p>Aleluja. Testovací verš před evangeliem. Aleluja.</p>
+<h4>Evangelium – Test 3,1-2</h4>
+<p>Čtení ze svatého evangelia podle Testa.</p>
+<p>Testovací evangelium všedního dne. Věta dvě.</p>
+<h4>Modlitba nad dary</h4>
+<p>Testovací modlitba nad dary.</p>
+<h4>Modlitba po přijímání</h4>
+<p>Testovací modlitba po přijímání pro všední den.</p>
+</body>
+</html>
+HTML,
+
+        'misal/06mezidobi/NST.htm' => <<<'HTML'
+<html><head><meta charset="utf-8"></head><body><h3>Slavnost Nejsvětější Trojice</h3><h4>Vstupní modlitba</h4><p>Test vstupní slavnosti.</p><p>Amen.</p>
+<h4>Čtení z Písma podle ročního cyklu</h4>
+<h4>1. čtení – Ex 34,4b-6</h4><p>Čtení z knihy testovací A.</p><p>Čtení A, věta jedna.</p><p>Slovo Boží.</p>
+<h4>Mezizpěv – Dan 3,52</h4><p><i>[Odpověď slavnost A.]</i></p><p>Sloka slavnost A.</p>
+<h4>2. čtení – 2 Kor 13,11</h4><p>Čtení z druhého listu testovacího A.</p><p>Druhé čtení A.</p>
+<h4>Zpěv před evangeliem – srov. Zj 1,8</h4><p>Aleluja. Verš slavnost A. Aleluja.</p>
+<h4>Evangelium – Jan 3,16-18</h4><p>Slova svatého evangelia podle Jana.</p><p>Evangelium slavnost A.</p>
+<h4>1. čtení – Dt 4,32-34</h4><p>Čtení z knihy testovací B.</p><p>Čtení B, věta jedna.</p><p>Slovo Boží.</p>
+<h4>Mezizpěv – Žl 33,4-5</h4><p><i>[Odpověď slavnost B.]</i></p><p>Sloka slavnost B.</p>
+<h4>2. čtení – Řím 8,14</h4><p>Čtení z listu testovacího B.</p><p>Druhé čtení B.</p>
+<h4>Zpěv před evangeliem – srov. Zj 1,8</h4><p>Aleluja. Verš slavnost B. Aleluja.</p>
+<h4>Evangelium – Mt 28,16-20</h4><p>Slova svatého evangelia podle Matouše.</p><p>Evangelium slavnost B.</p>
+<h4>1. čtení – Př 8,22-31</h4><p>Čtení z knihy testovací C.</p><p>Čtení C, věta jedna.</p><p>Slovo Boží.</p>
+<h4>Mezizpěv – Žl 8,4-5</h4><p><i>[Odpověď slavnost C.]</i></p><p>Sloka slavnost C.</p>
+<h4>2. čtení – Řím 5,1-5</h4><p>Čtení z listu testovacího C.</p><p>Druhé čtení C.</p>
+<h4>Zpěv před evangeliem – Srov. Zj 1,8</h4><p>Aleluja. Verš slavnost C. Aleluja.</p>
+<h4>Evangelium – Jan 16,12-15</h4><p>Slova svatého evangelia podle Jana.</p><p>Evangelium slavnost C.</p>
+<h4>Odpověď na Boží slovo</h4><p>Vyznání víry.</p><h4>Modlitba nad dary</h4><p>Dary.</p>
+<h4>Modlitba po přijímání</h4><p>Test po přijímání slavnosti. Skrze Krista.</p><p>Amen.</p></body></html>
+HTML,
+
+        'misal/08sanctoral/11_01.htm' => <<<'HTML'
+<html><head><meta charset="utf-8"></head><body><h3>Slavnost všech svatých</h3><h4>Vstupní modlitba</h4><p>Testovací modlitba Všech svatých.</p><p>Amen.</p>
+<h4>1. čtení - Zj 7,2-4.9-14</h4><p>Čtení z knihy Zjevení</p><p>Test čtení svatých.</p><p>Slovo Boží.</p>
+<h4>Mezizpěv - Žl 24 (23), 1-2.3-4ab.5-6</h4><p><i>Toto je pokolení těch, kdo hledají tvou tvář.</i></p><p>Hospodinova je země,<br>i vše, co ji plní.</p>
+<h4>2. čtení - 1 Jan 3,1-3</h4><p>Čtení z prvního listu svatého apoštola Jana</p><p>Test 2. čtení.</p><p>Slovo Boží.</p>
+<h4>Zpěv před evangeliem - Mt 11,28</h4><p>Aleluja. Pojďte ke mně, všichni. Aleluja.</p>
+<h4>Evangelium – Mt 5,1-12a</h4><p>Slova svatého evangelia podle Matouše</p><p>Test evangelium svatých.</p><p>Slovo Páně.</p>
+<h4>Modlitba po přijímání</h4><p>Test po přijímání svatých.</p><p>Amen.</p></body></html>
+HTML,
+
+        'misal/08sanctoral/11_02.htm' => <<<'HTML'
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Vzpomínka na všechny věrné zemřelé - testovací data</title>
+</head>
+<body>
+<h3>Vzpomínka na všechny věrné zemřelé</h3>
+<h4>Mešní formuláře</h4>
+<h4>1. mešní formulář</h4>
+<h4>Vstupní antifona – Test 1,1</h4>
+<h4>Vstupní modlitba</h4>
+<p>Testovací vstupní modlitba prvního formuláře.</p>
+<h4>Modlitba nad dary</h4>
+<p>Testovací modlitba nad dary prvního formuláře.</p>
+<h4>Modlitba po přijímání</h4>
+<p>Testovací modlitba po přijímání prvního formuláře.</p>
+<h4>2. mešní formulář</h4>
+<h4>Vstupní antifona – Test 2,1</h4>
+<h4>Vstupní modlitba</h4>
+<p>Testovací vstupní modlitba druhého formuláře.</p>
+<h4>Modlitba nad dary</h4>
+<p>Testovací modlitba nad dary druhého formuláře.</p>
+<h4>Modlitba po přijímání</h4>
+<p>Testovací modlitba po přijímání druhého formuláře.</p>
+<h4>3. mešní formulář</h4>
+<h4>Vstupní modlitba</h4>
+<p>Testovací vstupní modlitba třetího formuláře.</p>
+<h4>Modlitba po přijímání</h4>
+<p>Testovací modlitba po přijímání třetího formuláře.</p>
+<h4>Preface</h4>
+<h4>1. čtení – Test 9,1-2</h4>
+<p>Testovací čtení vzpomínky.</p>
+</body>
+</html>
+HTML,
+    ];
+}
+
+/** Smaže složku i s obsahem (dočasné ukázky testů). */
+function smazSlozku(string $dir): void
+{
+    if (!is_dir($dir)) { return; }
+    foreach (scandir($dir) as $f) {
+        if ($f === '.' || $f === '..') { continue; }
+        $cesta = "$dir/$f";
+        if (is_dir($cesta)) { smazSlozku($cesta); } else { @unlink($cesta); }
+    }
+    @rmdir($dir);
+}
+
+function spustTesty(): int
+{
+    global $CFG, $ok, $chyb;
+    $ok = 0; $chyb = 0;
+    $tmp = sys_get_temp_dir() . '/bohosluzba-test-' . getmypid();
+    foreach (testovaciSoubory() as $cesta => $obsah) {
+        $plna = "$tmp/$cesta";
+        if (!is_dir(dirname($plna))) { mkdir(dirname($plna), 0777, true); }
+        file_put_contents($plna, $obsah);
+    }
+    $cfg = $CFG;
+    $cfg['svatky_ve_vsedni_den'] = ['12-25','01-01','01-06','03-19','03-25','06-24','06-29','07-05','08-15','09-28','11-01','11-02','12-08'];
+    $cfg['zdroj'] = "$tmp/misal";
+$d = fn(string $s) => new DateTimeImmutable($s);
+$nazev = function (string $den) use ($cfg, $d) { $p = popisDne($d($den), $cfg + ['_vsedni' => ['nanebevstoupeni', 'bozi_telo']]); return $p['nazev'] ?? null; };
+
+// Velikonoce a advent (ověřené známé hodnoty)
+jeRovno('Velikonoce 2026', velikonoce(2026)->format('Y-m-d'), '2026-04-05');
+jeRovno('Velikonoce 2025', velikonoce(2025)->format('Y-m-d'), '2025-04-20');
+jeRovno('Velikonoce 2024', velikonoce(2024)->format('Y-m-d'), '2024-03-31');
+jeRovno('Advent 2026', adventZacatek(2026)->format('Y-m-d'), '2026-11-29');
+jeRovno('Advent 2025', adventZacatek(2025)->format('Y-m-d'), '2025-11-30');
+// Liturgický rok: adv. 2025 = A, adv. 2026 = B, adv. 2027 = C
+jeRovno('rok říjen 2026', cyklus($d('2026-10-11')), 'A');
+jeRovno('rok prosinec 2026', cyklus($d('2026-12-06')), 'B');
+jeRovno('rok leden 2028', cyklus($d('2028-01-09')), 'C');
+// Neděle
+jeRovno('27. v mezidobí', $nazev('2026-10-04'), '27. neděle v mezidobí');
+jeRovno('28. v mezidobí', $nazev('2026-10-11'), '28. neděle v mezidobí');
+jeRovno('Všech svatých v neděli', $nazev('2026-11-01'), 'Všech svatých');
+jeRovno('Kristus Král', $nazev('2026-11-22'), 'Ježíše Krista Krále');
+jeRovno('1. advent', $nazev('2026-11-29'), '1. neděle adventní');
+jeRovno('8. 12. 2024 neděle adventní', $nazev('2024-12-08'), '2. neděle adventní');
+jeRovno('8. 12. 2024 přeneseno na pondělí', $nazev('2024-12-09'), 'Neposkvrněného početí Panny Marie (přeneseno)');
+jeRovno('Svatá rodina 2026', $nazev('2026-12-27'), 'Svaté Rodiny: Ježíše, Marie a Josefa');
+jeRovno('Křest Páně 2027', $nazev('2027-01-10'), 'Křtu Páně');
+jeRovno('2. v mezidobí 2027', $nazev('2027-01-17'), '2. neděle v mezidobí');
+jeRovno('1. postní 2027', $nazev('2027-02-14'), '1. neděle postní');
+jeRovno('Květná 2027', $nazev('2027-03-21'), 'Květná neděle');
+jeRovno('Velikonoce 2027', $nazev('2027-03-28'), 'Neděle Zmrtvýchvstání Páně');
+jeRovno('Letnice 2027', $nazev('2027-05-16'), 'Seslání Ducha Svatého (Letnice)');
+jeRovno('Trojice 2027', $nazev('2027-05-23'), 'Nejsvětější Trojice');
+jeRovno('Václav ve všední den', $nazev('2027-09-28'), 'Sv. Václava, hlavního patrona českého národa');
+jeRovno('Povinná památka má přednost (7. 10.)', $nazev('2026-10-07'), 'Panny Marie Růžencové');
+jeRovno('Feriální den 7. 10. je středa po 27. neděli', feriePodleObdobi($d('2026-10-07'))['nazev'], 'Středa po 27. neděli v mezidobí');
+// Čtyři příští příležitosti od 5. 10. 2026 (včetně všedních dnů v mezidobí)
+$dal = array_map(fn($p) => $p['datum']->format('m-d'), dalsiPrilezitosti($d('2026-10-05'), 4, $cfg));
+jeRovno('příštích 4', $dal, ['10-05', '10-06', '10-07', '10-08']);
+// Gloria
+jeRovno('Gloria advent', popisDne($d('2026-12-06'), $cfg)['gloria'], false);
+jeRovno('Gloria mezidobí', popisDne($d('2026-10-11'), $cfg)['gloria'], true);
+jeRovno('Gloria slavnost v adventu', popisDne($d('2026-12-08'), $cfg)['gloria'], true);
+
+// Rozbor stránek (ukázková data)
+$p = popisDne($d('2026-10-11'), $cfg); $p['datum'] = $d('2026-10-11');
+$t = nactiTexty($p, $cfg);
+jeRovno('vstupní', $t['vstupni'], 'Testovací vstupní modlitba 28. neděle. Skrze našeho Pána.');
+jeRovno('1. čtení rok A', $t['cteni1']['text'], 'Testovací první čtení A, věta jedna. Věta dvě.');
+jeRovno('citace 1. čtení', $t['cteni1']['citace'], 'Iz 1,1-2');
+jeRovno('refrén', $t['zalm']['refren'], 'Testovací odpověď A.');
+jeRovno('počet slok', count($t['zalm']['sloky']), 2);
+jeRovno('verš bez aleluja', $t['verš']['bez_aleluja'], 'Testovací verš A.');
+jeRovno('evangelium', $t['evangelium']['text'], 'Testovací evangelium A.');
+jeRovno('po přijímání', $t['po_prijimani'], 'Testovací modlitba po přijímání. Skrze Krista.');
+$p['rok'] = 'C'; jeRovno('rok C', nactiTexty($p, $cfg)['cteni1']['text'], 'Testovací první čtení C, věta jedna. Věta dvě.');
+// Slavnost bez nadpisů „v roce“: bloky čtení A, B, C jdou za sebou
+$tr = popisDne($d('2027-05-23'), $cfg + ['_vsedni' => ['nanebevstoupeni', 'bozi_telo']]); $tr['datum'] = $d('2027-05-23');
+foreach (['A', 'B', 'C'] as $rokCteni) {
+    $tr['rok'] = $rokCteni;
+    jeRovno("Trojice rok $rokCteni", nactiTexty($tr, $cfg)['cteni1']['text'], "Čtení $rokCteni, věta jedna.");
+}
+$s = popisDne($d('2026-11-01'), $cfg); $s['datum'] = $d('2026-11-01');
+$ts = nactiTexty($s, $cfg);
+jeRovno('svatí: citace z nadpisu', $ts['cteni1']['citace'], 'Zj 7,2-4.9-14');
+jeRovno('svatí: 2. čtení', $ts['cteni2']['text'], 'Test 2. čtení.');
+jeRovno('svatí: žalm refrén (kurzíva)', $ts['zalm']['refren'], 'Toto je pokolení těch, kdo hledají tvou tvář.');
+// Rozbalovací tlačítko „Čtení z Písma v roce B“ je nadpis a odkaz „zpět“ se do textu nedostane
+$snip = rozdelNaSekce('<html><body><h3>x</h3><p><button>Čtení z Písma v roce B</button></p><h4>1. čtení</h4><p>Text.</p><p><a href="i.html">zpět</a></p></body></html>');
+jeRovno('tlačítko je nadpis', $snip[2]['nazev'], 'Čtení z Písma v roce B');
+jeRovno('zpět mimo text', array_map(fn($r) => $r['t'], $snip[3]['radky']), ['Text.']);
+// Vlastní texty (kontrola): přepíší automatický text v paměti, ostatní části zůstanou; nic se neukládá
+$pu = popisDne($d('2026-10-11'), $cfg); $pu['datum'] = $d('2026-10-11');
+$tu = uplatniUpravy(nactiTexty($pu, $cfg), ['verš' => 'Vlastní verš.', 'cteni1' => 'Vlastní čtení.']);
+jeRovno('úprava: verš', $tu['verš']['bez_aleluja'], 'Vlastní verš.');
+jeRovno('úprava: 1. čtení', $tu['cteni1']['text'], 'Vlastní čtení.');
+jeRovno('úprava: vstupní beze změny', $tu['vstupni'], 'Testovací vstupní modlitba 28. neděle. Skrze našeho Pána.');
+// Formulář: prázdná pole se neberou, „sedí“ se eviduje
+$zf = zFormulare(['ov' => ['verš' => " Text \r\n", 'cteni1' => ''], 'ok' => ['verš' => '1']]);
+jeRovno('formulář: texty', $zf['texty'], ['verš' => 'Text']);
+jeRovno('formulář: sedí', $zf['overeno'], ['verš' => true]);
+jeRovno('přímluvy nejsou v kontrole', array_key_exists('primluvy', castyUpravy()), false);
+// Žalm: v bohoslužbě jen číslo, PDF nápěvu z Korejse podle lekcionáře (verše, příležitost, cyklus)
+jeRovno('žalm: číslo', zalmCislo('Žl 80 (79), 9+12.13-14.15-16.19-20'), 'Žl 80 (79)');
+jeRovno('žalm: číslo bez závorky', zalmCislo('Žl 98,1.2-3ab.3cd-4'), 'Žl 98');
+jeRovno('žalm: není žalm', zalmCislo('Iz 25,6-10a'), '');
+$kc = $cfg; $kc['korejs'] = "$tmp/korejs/";
+jeRovno('korejs: 27. neděle A', korejsOdkaz('Žl 80 (79), 9+12.13-14.15-16.19-20', 'A', '27. neděle v mezidobí', $kc), "$tmp/korejs/zalmy/TestPs080_05.pdf");
+jeRovno('korejs: 1. adventní B', korejsOdkaz('Žl 80 (79), 2ac+3b.15-16.18-19', 'B', '1. neděle adventní', $kc), "$tmp/korejs/zalmy/TestPs080_03.pdf");
+jeRovno('korejs: 4. adventní C', korejsOdkaz('Žl 80 (79), 2ac+3b.15-16.18-19', 'C', '4. neděle adventní', $kc), "$tmp/korejs/zalmy/TestPs080_03c.pdf");
+jeRovno('korejs: nic k žalmu', korejsOdkaz('Iz 25,6-10a', 'A', '27. neděle v mezidobí', $kc), null);
+// Jedna bohoslužba (web i tisk) se vykreslí bez varování a chyb
+set_error_handler(function (int $no, string $str) { throw new ErrorException($str, 0, $no); });
+$pp = popisDne($d('2026-10-18'), $kc + ['_vsedni' => ['nanebevstoupeni', 'bozi_telo']]);
+$pp['datum'] = $d('2026-10-18');
+$html = stranka($pp, $kc, true, null, formular($kc, '2026-10-18'));
+$html2 = stranka($pp, $kc, false);
+restore_error_handler();
+jeRovno('bohoslužba: jedna krabička', substr_count($html, 'class="krabice nezobrazovat"'), 1);
+jeRovno('bohoslužba: legenda', substr_count($html2, 'Zkratky:'), 1);
+jeRovno('bohoslužba: titulek s datem', str_contains($html, '<title>Bohoslužba slova neděle 18. 10. 2026</title>'), true);
+jeRovno('bohoslužba: bez seznamu a sidebaru', str_contains($html, 'class="bocni"'), false);
+jeRovno('bohoslužba: odkaz na kontrolu nese nastavení', str_contains($html, 'href="?uprava=2026-10-18&amp;forma=1&amp;nanebevstoupeni=ctvrtek&amp;bozi_telo=ctvrtek&amp;zformular=1&amp;vsedni=1"'), true);
+jeRovno('bohoslužba: formulář má den, ne počet', [str_contains($html, 'name="den"'), str_contains($html, 'name="pocet"')], [true, false]);
+$cfgDny = $cfg + ['_vsedni' => ['nanebevstoupeni', 'bozi_telo']];
+$cfgSvatky = $cfgDny; $cfgSvatky['svatky_ve_vsedni_den'] = $CFG['svatky_ve_vsedni_den']; // výchozí seznam svátků
+// Všední dny v mezidobí: stránka týdne NN_0D, feriální cyklus I/II podle roku, bez vyznání a Gloria
+jeRovno('ferie: pondělí po 29. neděli', $nazev('2026-10-19'), 'Pondělí po 29. neděli v mezidobí');
+jeRovno('ferie: soubor týdne', popisDne($d('2026-10-19'), $cfg)['odkaz']['soubor'], '29_01.htm');
+jeRovno('ferie: cyklus II v sudém roce', popisDne($d('2026-10-19'), $cfg)['rok'], 'II');
+jeRovno('ferie: cyklus I v lichém roce', popisDne($d('2027-10-18'), $cfgDny)['rok'], 'I');
+jeRovno('ferie: soubor 2027', popisDne($d('2027-10-18'), $cfgDny)['odkaz']['soubor'], '29_01.htm');
+jeRovno('ferie: pondělí 1. týdne po Křtu', $nazev('2026-01-12'), 'Pondělí 1. týdne v mezidobí');
+jeRovno('ferie: úterý před popeleční středou', popisDne($d('2026-02-17'), $cfgDny)['odkaz']['soubor'], '06_02.htm');
+jeRovno('ferie: popeleční středa (půst)', popisDne($d('2026-02-18'), $cfgDny)['odkaz']['soubor'], '00_03.htm');
+jeRovno('ferie: pondělí po Trojici (týden 9)', feriePodleObdobi($d('2026-06-01'))['odkaz']['soubor'], '09_01.htm');
+jeRovno('ferie: pondělí po Kristu Králi (týden 34)', popisDne($d('2026-11-23'), $cfg)['odkaz']['soubor'], '34_01.htm');
+jeRovno('ferie: pondělí po 1. neděli adventní', popisDne($d('2026-11-30'), $cfgDny)['odkaz']['soubor'], '01_01.htm');
+jeRovno('ferie: 17. prosince podle data', popisDne($d('2026-12-17'), $cfgDny)['odkaz']['soubor'], '12_17.htm');
+jeRovno('ferie: 29. prosince (vánoce)', popisDne($d('2026-12-29'), $cfgDny)['nazev'], '29. prosince');
+jeRovno('ferie: 26. prosince svatý zatím ne', popisDne($d('2026-12-26'), $cfgDny), null);
+jeRovno('ferie: 7. ledna (vánoce)', popisDne($d('2027-01-07'), $cfgDny)['odkaz']['soubor'], '01_07.htm');
+jeRovno('triduum: Zelený čtvrtek', popisDne($d('2026-04-02'), $cfgDny)['odkaz']['soubor'], '01ctvrtek.htm');
+jeRovno('triduum: Zelený čtvrtek bez Vyznání, s Glorií', [popisDne($d('2026-04-02'), $cfgDny)['kredo'], popisDne($d('2026-04-02'), $cfgDny)['gloria']], [false, true]);
+jeRovno('triduum: Velký pátek bez Glorie a Vyznání', [popisDne($d('2026-04-03'), $cfgDny)['odkaz']['soubor'], popisDne($d('2026-04-03'), $cfgDny)['kredo'], popisDne($d('2026-04-03'), $cfgDny)['gloria']], ['02patek.htm', false, false]);
+jeRovno('vigilie: Velká sobota', popisDne($d('2026-04-04'), $cfgDny)['odkaz']['soubor'], '04vigilie_2.htm');
+jeRovno('vigilie: příznak', popisDne($d('2026-04-04'), $cfgDny)['vigilie'] ?? false, true);
+jeRovno('památka s vlastní stránkou (3. 12.)', [popisDne($d('2026-12-03'), $cfgDny)['nazev'], popisDne($d('2026-12-03'), $cfgDny)['odkaz']['soubor'], popisDne($d('2026-12-03'), $cfgDny)['hodnost']], ['sv. Františka Xaverského', '12_03.htm', 'pamatka']);
+jeRovno('nepovinná památka se bez nastavení neslaví', popisDne($d('2026-12-04'), $cfgDny)['hodnost'], 'ferie');
+jeRovno('Štěpán ve všední den (26. 12. 2026 je sobota)', [popisDne($d('2026-12-26'), $cfgSvatky)['nazev'], popisDne($d('2026-12-26'), $cfgSvatky)['odkaz']['soubor']], ['sv. Štěpána', '12_26.htm']);
+jeRovno('Svatá rodina v neděli 27. 12. 2026 přebíjí svátek', popisDne($d('2026-12-27'), $cfgDny)['nazev'], 'Svaté Rodiny: Ježíše, Marie a Josefa');
+jeRovno('ferie: pondělí Svatého týdne', popisDne($d('2026-03-30'), $cfgDny)['odkaz']['soubor'], '06_01.htm');
+jeRovno('ferie: pondělí v oktávu velikonočním', popisDne($d('2026-04-06'), $cfgDny)['odkaz']['soubor'], '01_01.htm');
+jeRovno('ferie: pondělí po 2. neděli velikonoční', popisDne($d('2026-04-13'), $cfgDny)['odkaz']['soubor'], '02_01.htm');
+jeRovno('ferie: čtvrtek 6. týdne velikonočního (Nanebevstoupení) zatím ne', popisDne($d('2026-05-14'), $cfgDny)['nazev'], 'Nanebevstoupení Páně');
+jeRovno('ferie: týden po Letnicích (týden 8)', feriePodleObdobi($d('2026-05-26'))['odkaz']['soubor'], '08_02.htm');
+jeRovno('ferie: pondělí po Letnicích (týden 8)', popisDne($d('2026-05-25'), $cfgDny)['odkaz']['soubor'], '08_01.htm');
+jeRovno('ferie: pondělí po Trojici (týden 9, 2026)', feriePodleObdobi($d('2026-06-01'))['odkaz']['soubor'], '09_01.htm');
+jeRovno('ferie: 1. týden postní', popisDne($d('2026-02-23'), $cfgDny)['odkaz']['soubor'], '01_01.htm');
+jeRovno('ferie: bez vyznání a Gloria', [popisDne($d('2026-10-19'), $cfg)['kredo'], popisDne($d('2026-10-19'), $cfg)['gloria']], [false, false]);
+jeRovno('neděle v mezidobí: vyznání a Gloria', [popisDne($d('2026-10-18'), $cfg)['kredo'], popisDne($d('2026-10-18'), $cfg)['gloria']], [true, true]);
+// Čtení ze stránky všedního dne: cyklus I/II se vybere podle roku, verš a evangelium jsou společné
+$pf = popisDne($d('2026-10-19'), $cfg); $pf['datum'] = $d('2026-10-19');
+$tf = nactiTexty($pf, $kc);
+jeRovno('ferie II: 1. čtení z cyklu II', str_contains($tf['cteni1']['text'] ?? '', 'cyklu dva'), true);
+jeRovno('ferie II: bez čtení z cyklu I', str_contains($tf['cteni1']['text'] ?? '', 'cyklu jedna'), false);
+jeRovno('ferie: verš bez Aleluja', $tf['verš']['bez_aleluja'] ?? null, 'Testovací verš před evangeliem.');
+jeRovno('ferie: evangelium', str_contains($tf['evangelium']['text'] ?? '', 'všedního dne'), true);
+jeRovno('ferie: vstupní modlitba', str_contains($tf['vstupni'] ?? '', 'všední den'), true);
+$pf1 = popisDne($d('2027-10-18'), $cfgDny); $pf1['datum'] = $d('2027-10-18');
+$tf1 = nactiTexty($pf1, $kc);
+jeRovno('ferie I: 1. čtení z cyklu I', str_contains($tf1['cteni1']['text'] ?? '', 'cyklu jedna'), true);
+jeRovno('ferie I: bez chyb', $tf1['chyby'], []);
+// Svátky ve všední den se nabízejí (výchozí seznam z NASTAVENÍ), ne jako všední dny
+jeRovno('svátek: Proměnění ve všední den', popisDne($d('2026-08-06'), $cfgSvatky)['nazev'] ?? null, 'Proměnění Páně');
+jeRovno('svátek: Povýšení kříže ve všední den', popisDne($d('2026-09-14'), $cfgSvatky)['nazev'] ?? null, 'Povýšení svatého Kříže');
+jeRovno('svátek: Posvěcení lateránské baziliky', popisDne($d('2026-11-09'), $cfgSvatky)['hodnost'] ?? null, 'svatek');
+jeRovno('svátek: Uvedení Páně do chrámu', popisDne($d('2026-02-02'), $cfgSvatky)['odkaz']['slozka'] ?? null, '08sanctoral');
+// Pašije: evangelium, nadpis bez citace ne
+jeRovno('pašije: cyklus A', typSekce('Pašije v ročním cyklu A – Mt 26,14-27,66'), 'evangelium');
+jeRovno('pašije: Velký pátek', typSekce('Pašije – Jan 18,1-19,42'), 'evangelium');
+jeRovno('pašije: nadpis bez citace', typSekce('Pašije'), null);
+jeRovno('pašije: tlačítko roku', typSekce('Pašije v roce A'), null);
+// Velikonoční vigilie (fixtura): sedm čtení a epištola s žalmy, evangelium podle roku
+$pv = popisDne($d('2026-04-04'), $cfgDny); $pv['datum'] = $d('2026-04-04');
+$tv = nactiTexty($pv, $kc);
+jeRovno('vigilie: osm čtení (1.–7. a epištola)', count($tv['cteni_vigilie']), 8);
+jeRovno('vigilie: 1. čtení', $tv['cteni_vigilie'][0]['citace'], 'Test 1,1-2');
+jeRovno('vigilie: epištola je poslední', $tv['cteni_vigilie'][7]['citace'], 'Test 8,3-11');
+jeRovno('vigilie: žalm u 1. čtení', $tv['cteni_vigilie'][0]['zalm']['citace'], 'Žl 104,1-2a.5-6');
+jeRovno('vigilie: modlitba u 2. čtení', $tv['cteni_vigilie'][1]['modlitba'], 'Testovací modlitba po druhém čtení.');
+jeRovno('vigilie: evangelium roku A', $tv['evangelium']['citace'], 'Test 9,1-10');
+$pvB = $pv; $pvB['rok'] = 'B'; jeRovno('vigilie: evangelium roku B', nactiTexty($pvB, $kc)['evangelium']['citace'], 'Test 9,11-20');
+jeRovno('vigilie: bez chyb s úplnými čteními', $tv['chyby'], []);
+jeRovno('vigilie: bohoslužba slova má všech 8 čtení', count(array_filter(radkyVigilie($tv), fn($r) => $r[1] === 'Bohu díky.')), 8);
+jeRovno('vigilie: bez Vyznání víry', str_contains(stranka($pv, $kc), 'Věřím v jednoho Boha'), false);
+// Vzpomínka na zemřelé: formulář 1–3 určuje vstupní modlitbu a modlitbu po přijímání
+$zv = popisDne($d('2026-11-02'), $kc); $zv['datum'] = $d('2026-11-02');
+jeRovno('zemřelí: formulář 1 (výchozí)', nactiTexty($zv, $kc)['vstupni'], 'Testovací vstupní modlitba prvního formuláře.');
+$kz = $kc; $kz['zesnuli_formular'] = 2; $zv2 = nactiTexty($zv, $kz);
+jeRovno('zemřelí: formulář 2', [$zv2['vstupni'], $zv2['po_prijimani'], $zv2['formular']], ['Testovací vstupní modlitba druhého formuláře.', 'Testovací modlitba po přijímání druhého formuláře.', 2]);
+$kz['zesnuli_formular'] = 3; jeRovno('zemřelí: formulář 3 bez nadpisu nad dary', nactiTexty($zv, $kz)['vstupni'], 'Testovací vstupní modlitba třetího formuláře.');
+jeRovno('zemřelí: čtení nejsou z formuláře', nactiTexty($zv, $kc)['cteni1'] ?? null, null);
+// Adventní všední den: hlavní čtení je první, volitelné „v cyklu A“ se nebere, „Čte-li se …“ se neukáže
+$pa = popisDne($d('2026-11-30'), $cfgDny); $pa['datum'] = $d('2026-11-30');
+$ta = nactiTexty($pa, $kc);
+jeRovno('advent: hlavní 1. čtení', $ta['cteni1']['citace'], 'Test 2,1-5');
+jeRovno('advent: bez volitelného čtení', str_contains($ta['cteni1']['text'] ?? '', 'alternativní'), false);
+jeRovno('advent: bez věty „Čte-li se“', str_contains($ta['cteni1']['text'] ?? '', 'Čte-li'), false);
+jeRovno('advent: hlavní text 1. čtení', str_contains($ta['cteni1']['text'] ?? '', 'Testovací hlavní čtení'), true);
+jeRovno('advent: verš bez Aleluja', $ta['verš']['bez_aleluja'] ?? null, 'Testovací verš adventní.');
+jeRovno('advent: žalm a evangelium', [$ta['zalm']['citace'] ?? null, $ta['evangelium']['citace'] ?? null], ['Žl 122,1-2', 'Test 8,5-11']);
+// Stránka všedního dne: bez vyznání a Gloria, s označením feriálního cyklu
+set_error_handler(function (int $no, string $str) { throw new ErrorException($str, 0, $no); });
+$hf = stranka($pf, $kc);
+restore_error_handler();
+jeRovno('ferie: stránka bez vyznání víry', str_contains($hf, 'Věřím v jednoho Boha'), false);
+jeRovno('ferie: stránka bez Gloria', str_contains($hf, 'Sláva na výsostech'), false);
+jeRovno('ferie: stránka s feriálním cyklem', str_contains($hf, 'feriální cyklus II'), true);
+    smazSlozku($tmp);
+    echo "Hotovo: $ok v pořádku, $chyb chyb.\n";
+    return $chyb ? 1 : 0;
+}
+
+if (PHP_SAPI === 'cli' && in_array('--test', $GLOBALS['argv'] ?? [], true)) {
+    exit(spustTesty());
+}
+if (!defined('BS_KNIHOVNA')) { bsHlavni($CFG); } // BS_KNIHOVNA: soubor jde načíst jako knihovna (bez výstupu)

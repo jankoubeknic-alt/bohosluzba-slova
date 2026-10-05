@@ -3,4 +3,3 @@ cache/
 # vygenerované výstupy
 *.html
 .DS_Store
-!test/**/*.html
