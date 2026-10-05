@@ -38,7 +38,8 @@ jeRovno('Velikonoce 2027', $nazev('2027-03-28'), 'Neděle Zmrtvýchvstání Pán
 jeRovno('Letnice 2027', $nazev('2027-05-16'), 'Seslání Ducha Svatého (Letnice)');
 jeRovno('Trojice 2027', $nazev('2027-05-23'), 'Nejsvětější Trojice');
 jeRovno('Václav ve všední den', $nazev('2027-09-28'), 'Sv. Václava, hlavního patrona českého národa');
-jeRovno('Všední den v mezidobí (feriální)', $nazev('2026-10-07'), 'Středa po 27. neděli v mezidobí');
+jeRovno('Povinná památka má přednost (7. 10.)', $nazev('2026-10-07'), 'Panny Marie Růžencové');
+jeRovno('Feriální den 7. 10. je středa po 27. neděli', feriePodleObdobi($d('2026-10-07'))['nazev'], 'Středa po 27. neděli v mezidobí');
 // Čtyři příští příležitosti od 5. 10. 2026 (včetně všedních dnů v mezidobí)
 $dal = array_map(fn($p) => $p['datum']->format('m-d'), dalsiPrilezitosti($d('2026-10-05'), 4, $cfg));
 jeRovno('příštích 4', $dal, ['10-05', '10-06', '10-07', '10-08']);
@@ -108,6 +109,7 @@ jeRovno('bohoslužba: bez seznamu a sidebaru', str_contains($html, 'class="bocni
 jeRovno('bohoslužba: odkaz na kontrolu nese nastavení', str_contains($html, 'href="?uprava=2026-10-18&amp;forma=1&amp;nanebevstoupeni=ctvrtek&amp;bozi_telo=ctvrtek&amp;vsedni=1"'), true);
 jeRovno('bohoslužba: formulář má den, ne počet', [str_contains($html, 'name="den"'), str_contains($html, 'name="pocet"')], [true, false]);
 $cfgDny = $cfg + ['_vsedni' => ['nanebevstoupeni', 'bozi_telo']];
+$cfgSvatky = $cfgDny; $cfgSvatky['svatky_ve_vsedni_den'] = $CFG['svatky_ve_vsedni_den']; // výchozí seznam svátků
 // Všední dny v mezidobí: stránka týdne NN_0D, feriální cyklus I/II podle roku, bez vyznání a Gloria
 jeRovno('ferie: pondělí po 29. neděli', $nazev('2026-10-19'), 'Pondělí po 29. neděli v mezidobí');
 jeRovno('ferie: soubor týdne', popisDne($d('2026-10-19'), $cfg)['odkaz']['soubor'], '29_01.htm');
@@ -117,7 +119,7 @@ jeRovno('ferie: soubor 2027', popisDne($d('2027-10-18'), $cfgDny)['odkaz']['soub
 jeRovno('ferie: pondělí 1. týdne po Křtu', $nazev('2026-01-12'), 'Pondělí 1. týdne v mezidobí');
 jeRovno('ferie: úterý před popeleční středou', popisDne($d('2026-02-17'), $cfgDny)['odkaz']['soubor'], '06_02.htm');
 jeRovno('ferie: popeleční středa (půst)', popisDne($d('2026-02-18'), $cfgDny)['odkaz']['soubor'], '00_03.htm');
-jeRovno('ferie: pondělí po Trojici (týden 9)', popisDne($d('2026-06-01'), $cfg)['odkaz']['soubor'], '09_01.htm');
+jeRovno('ferie: pondělí po Trojici (týden 9)', feriePodleObdobi($d('2026-06-01'))['odkaz']['soubor'], '09_01.htm');
 jeRovno('ferie: pondělí po Kristu Králi (týden 34)', popisDne($d('2026-11-23'), $cfg)['odkaz']['soubor'], '34_01.htm');
 jeRovno('ferie: pondělí po 1. neděli adventní', popisDne($d('2026-11-30'), $cfgDny)['odkaz']['soubor'], '01_01.htm');
 jeRovno('ferie: 17. prosince podle data', popisDne($d('2026-12-17'), $cfgDny)['odkaz']['soubor'], '12_17.htm');
@@ -127,14 +129,19 @@ jeRovno('ferie: 7. ledna (vánoce)', popisDne($d('2027-01-07'), $cfgDny)['odkaz'
 jeRovno('triduum: Zelený čtvrtek', popisDne($d('2026-04-02'), $cfgDny)['odkaz']['soubor'], '01ctvrtek.htm');
 jeRovno('triduum: Zelený čtvrtek bez Vyznání, s Glorií', [popisDne($d('2026-04-02'), $cfgDny)['kredo'], popisDne($d('2026-04-02'), $cfgDny)['gloria']], [false, true]);
 jeRovno('triduum: Velký pátek bez Glorie a Vyznání', [popisDne($d('2026-04-03'), $cfgDny)['odkaz']['soubor'], popisDne($d('2026-04-03'), $cfgDny)['kredo'], popisDne($d('2026-04-03'), $cfgDny)['gloria']], ['02patek.htm', false, false]);
-jeRovno('triduum: Velká sobota zatím ne', popisDne($d('2026-04-04'), $cfgDny), null);
+jeRovno('vigilie: Velká sobota', popisDne($d('2026-04-04'), $cfgDny)['odkaz']['soubor'], '04vigilie_2.htm');
+jeRovno('vigilie: příznak', popisDne($d('2026-04-04'), $cfgDny)['vigilie'] ?? false, true);
+jeRovno('památka s vlastní stránkou (3. 12.)', [popisDne($d('2026-12-03'), $cfgDny)['nazev'], popisDne($d('2026-12-03'), $cfgDny)['odkaz']['soubor'], popisDne($d('2026-12-03'), $cfgDny)['hodnost']], ['sv. Františka Xaverského', '12_03.htm', 'pamatka']);
+jeRovno('nepovinná památka se bez nastavení neslaví', popisDne($d('2026-12-04'), $cfgDny)['hodnost'], 'ferie');
+jeRovno('Štěpán ve všední den (26. 12. 2026 je sobota)', [popisDne($d('2026-12-26'), $cfgSvatky)['nazev'], popisDne($d('2026-12-26'), $cfgSvatky)['odkaz']['soubor']], ['sv. Štěpána', '12_26.htm']);
+jeRovno('Svatá rodina v neděli 27. 12. 2026 přebíjí svátek', popisDne($d('2026-12-27'), $cfgDny)['nazev'], 'Svaté Rodiny: Ježíše, Marie a Josefa');
 jeRovno('ferie: pondělí Svatého týdne', popisDne($d('2026-03-30'), $cfgDny)['odkaz']['soubor'], '06_01.htm');
 jeRovno('ferie: pondělí v oktávu velikonočním', popisDne($d('2026-04-06'), $cfgDny)['odkaz']['soubor'], '01_01.htm');
 jeRovno('ferie: pondělí po 2. neděli velikonoční', popisDne($d('2026-04-13'), $cfgDny)['odkaz']['soubor'], '02_01.htm');
 jeRovno('ferie: čtvrtek 6. týdne velikonočního (Nanebevstoupení) zatím ne', popisDne($d('2026-05-14'), $cfgDny)['nazev'], 'Nanebevstoupení Páně');
-jeRovno('ferie: týden po Letnicích (týden 8)', popisDne($d('2026-05-26'), $cfgDny)['odkaz']['soubor'], '08_02.htm');
+jeRovno('ferie: týden po Letnicích (týden 8)', feriePodleObdobi($d('2026-05-26'))['odkaz']['soubor'], '08_02.htm');
 jeRovno('ferie: pondělí po Letnicích (týden 8)', popisDne($d('2026-05-25'), $cfgDny)['odkaz']['soubor'], '08_01.htm');
-jeRovno('ferie: pondělí po Trojici (týden 9, 2026)', popisDne($d('2026-06-01'), $cfgDny)['odkaz']['soubor'], '09_01.htm');
+jeRovno('ferie: pondělí po Trojici (týden 9, 2026)', feriePodleObdobi($d('2026-06-01'))['odkaz']['soubor'], '09_01.htm');
 jeRovno('ferie: 1. týden postní', popisDne($d('2026-02-23'), $cfgDny)['odkaz']['soubor'], '01_01.htm');
 jeRovno('ferie: bez vyznání a Gloria', [popisDne($d('2026-10-19'), $cfg)['kredo'], popisDne($d('2026-10-19'), $cfg)['gloria']], [false, false]);
 jeRovno('neděle v mezidobí: vyznání a Gloria', [popisDne($d('2026-10-18'), $cfg)['kredo'], popisDne($d('2026-10-18'), $cfg)['gloria']], [true, true]);
@@ -151,7 +158,6 @@ $tf1 = nactiTexty($pf1, $kc);
 jeRovno('ferie I: 1. čtení z cyklu I', str_contains($tf1['cteni1']['text'] ?? '', 'cyklu jedna'), true);
 jeRovno('ferie I: bez chyb', $tf1['chyby'], []);
 // Svátky ve všední den se nabízejí (výchozí seznam z NASTAVENÍ), ne jako všední dny
-$cfgSvatky = $cfgDny; $cfgSvatky['svatky_ve_vsedni_den'] = $CFG['svatky_ve_vsedni_den'];
 jeRovno('svátek: Proměnění ve všední den', popisDne($d('2026-08-06'), $cfgSvatky)['nazev'] ?? null, 'Proměnění Páně');
 jeRovno('svátek: Povýšení kříže ve všední den', popisDne($d('2026-09-14'), $cfgSvatky)['nazev'] ?? null, 'Povýšení svatého Kříže');
 jeRovno('svátek: Posvěcení lateránské baziliky', popisDne($d('2026-11-09'), $cfgSvatky)['hodnost'] ?? null, 'svatek');
@@ -161,6 +167,19 @@ jeRovno('pašije: cyklus A', typSekce('Pašije v ročním cyklu A – Mt 26,14-2
 jeRovno('pašije: Velký pátek', typSekce('Pašije – Jan 18,1-19,42'), 'evangelium');
 jeRovno('pašije: nadpis bez citace', typSekce('Pašije'), null);
 jeRovno('pašije: tlačítko roku', typSekce('Pašije v roce A'), null);
+// Velikonoční vigilie (fixtura): sedm čtení a epištola s žalmy, evangelium podle roku
+$pv = popisDne($d('2026-04-04'), $cfgDny); $pv['datum'] = $d('2026-04-04');
+$tv = nactiTexty($pv, $kc);
+jeRovno('vigilie: osm čtení (1.–7. a epištola)', count($tv['cteni_vigilie']), 8);
+jeRovno('vigilie: 1. čtení', $tv['cteni_vigilie'][0]['citace'], 'Test 1,1-2');
+jeRovno('vigilie: epištola je poslední', $tv['cteni_vigilie'][7]['citace'], 'Test 8,3-11');
+jeRovno('vigilie: žalm u 1. čtení', $tv['cteni_vigilie'][0]['zalm']['citace'], 'Žl 104,1-2a.5-6');
+jeRovno('vigilie: modlitba u 2. čtení', $tv['cteni_vigilie'][1]['modlitba'], 'Testovací modlitba po druhém čtení.');
+jeRovno('vigilie: evangelium roku A', $tv['evangelium']['citace'], 'Test 9,1-10');
+$pvB = $pv; $pvB['rok'] = 'B'; jeRovno('vigilie: evangelium roku B', nactiTexty($pvB, $kc)['evangelium']['citace'], 'Test 9,11-20');
+jeRovno('vigilie: bez chyb s úplnými čteními', $tv['chyby'], []);
+jeRovno('vigilie: bohoslužba slova má všech 8 čtení', count(array_filter(radkyVigilie($tv), fn($r) => $r[1] === 'Bohu díky.')), 8);
+jeRovno('vigilie: bez Vyznání víry', str_contains(stranka($pv, $kc), 'Věřím v jednoho Boha'), false);
 // Adventní všední den: hlavní čtení je první, volitelné „v cyklu A“ se nebere, „Čte-li se …“ se neukáže
 $pa = popisDne($d('2026-11-30'), $cfgDny); $pa['datum'] = $d('2026-11-30');
 $ta = nactiTexty($pa, $kc);

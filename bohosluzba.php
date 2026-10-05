@@ -24,8 +24,13 @@ $CFG = [
     'bozi_telo' => 'ctvrtek',                // 'ctvrtek' nebo 'nedele'
     'slavnosti_ve_vsedni_den' => true,       // true = nabízet i slavnosti ve všední dny; false = jen neděle
     // Které slavnosti a svátky ve všední den (měsíc-den) se nabízejí. Co nechcete, smažte.
-    'svatky_ve_vsedni_den' => ['12-25', '01-01', '01-06', '02-02', '03-19', '03-25', '06-24', '06-29',
-                               '07-05', '08-06', '08-15', '09-14', '09-28', '11-01', '11-02', '11-09', '12-08'],
+    'svatky_ve_vsedni_den' => ['01-01', '01-06', '01-25', '02-02', '02-22', '03-19', '03-25', '04-23', '04-25', '04-29',
+                               '05-03', '05-14', '05-16', '05-31', '06-24', '06-29', '07-03', '07-05', '07-11', '07-22',
+                               '07-23', '07-25', '08-06', '08-09', '08-10', '08-15', '08-24', '09-08', '09-14', '09-21',
+                               '09-28', '09-29', '10-18', '10-28', '11-01', '11-02', '11-09', '11-30', '12-08', '12-25',
+                               '12-26', '12-27', '12-28'],
+    // Památky svatých ve všední den: 'povinne' = jen povinné (mají texty na liturgie.cz), 'vsechny' i nepovinné (jen pokud mají stránku)
+    'vzpominky' => 'povinne',
     'vcetne_dnes' => false,                  // false = hledat od zítřka, true = od dneška
     'casove_pasmo' => 'Europe/Prague',
 ];
@@ -71,6 +76,225 @@ function odkaz(string $slozka, string $soubor, ?array $hledat = null): array
 {
     return ['slozka' => $slozka, 'soubor' => $soubor, 'hledat' => $hledat];
 }
+
+/** Sanktorální kalendář z liturgie.cz: 'MM-DD' => [hodnost, název, stránka v 08sanctoral (nebo null)].
+ *  Hodnost: S slavnost, SV svátek, P povinná památka, NP nepovinná památka. Pevné slavnosti jsou v pevneSlavnosti(). */
+const SANKTORAL = [
+    '12-01' => ['NP', 'sv. Edmunda Kampiána', null],
+    '12-03' => ['P', 'sv. Františka Xaverského', '12_03.htm'],
+    '12-04' => ['NP', 'sv. Jana Damašského', null],
+    '12-06' => ['NP', 'sv. Mikuláše', null],
+    '12-07' => ['P', 'sv. Ambrože', '12_07.htm'],
+    '12-08' => ['S', 'Panny Marie, počaté bez poskvrny prvotního hříchu', null],
+    '12-09' => ['NP', 'sv. Jana Didaka Cuauhtlatoatzina', null],
+    '12-10' => ['NP', 'Panny Marie Loretánské', null],
+    '12-11' => ['NP', 'sv. Damasa I.', null],
+    '12-12' => ['NP', 'Panny Marie Guadalupské', null],
+    '12-13' => ['P', 'sv. Lucie', '12_13.htm'],
+    '12-14' => ['P', 'sv. Jana od Kříže', '12_14.htm'],
+    '12-21' => ['NP', 'sv. Petra Kanisia', null],
+    '12-23' => ['NP', 'sv. Jana Kentského', null],
+    '12-26' => ['SV', 'sv. Štěpána', '12_26.htm'],
+    '12-27' => ['SV', 'sv. Jana', '12_27.htm'],
+    '12-28' => ['SV', 'sv. Mláďátek', '12_28.htm'],
+    '12-29' => ['NP', 'sv. Tomáše Becketa', null],
+    '12-31' => ['NP', 'sv. Silvestra I.', null],
+    '01-01' => ['S', 'Matky Boží, Panny Marie', '01_01.htm'],
+    '01-02' => ['P', 'sv. Basila Velikého a Řehoře Naziánského', '01_02.htm'],
+    '01-03' => ['NP', 'Nejsvětějšího Jména Ježíš', null],
+    '01-06' => ['S', 'Zjevení Páně', null],
+    '01-07' => ['NP', 'sv. Rajmunda z Peñafortu', null],
+    '01-13' => ['NP', 'sv. Hilaria', null],
+    '01-17' => ['P', 'sv. Antonína', '01_17.htm'],
+    '01-18' => ['P', 'Panny Marie, Matky jednoty křesťanů', '01_18.htm'],
+    '01-20' => ['NP', 'sv. Fabiána', null],
+    '01-21' => ['P', 'sv. Anežky', '01_21.htm'],
+    '01-22' => ['NP', 'sv. Vincence', null],
+    '01-24' => ['P', 'sv. Františka Saleského', '01_24.htm'],
+    '01-25' => ['SV', 'Obrácení sv. Pavla', '01_25.htm'],
+    '01-26' => ['P', 'sv. Timoteje a Tita', '01_26.htm'],
+    '01-27' => ['NP', 'sv. Anděly Mericiové', null],
+    '01-28' => ['P', 'sv. Tomáše Akvinského', '01_28.htm'],
+    '01-31' => ['P', 'sv. Jana Boska', '01_31.htm'],
+    '02-02' => ['SV', 'Uvedení Páně do chrámu', '02_23.htm'],
+    '02-03' => ['NP', 'sv. Blažeje', null],
+    '02-05' => ['P', 'sv. Agáty', '02_05.htm'],
+    '02-06' => ['P', 'sv. Pavla Mikiho a druhů', '02_06.htm'],
+    '02-08' => ['NP', 'sv. Jeronýma Emilianiho', null],
+    '02-10' => ['P', 'sv. Scholastiky', '02_10.htm'],
+    '02-11' => ['NP', 'Panny Marie Lurdské', null],
+    '02-17' => ['NP', 'sv. Alexia a druhů', null],
+    '02-21' => ['NP', 'sv. Petra Damianiho', null],
+    '02-22' => ['SV', 'Stolce sv. Petra', '02_22.htm'],
+    '02-23' => ['P', 'sv. Polykarpa', '02_23.htm'],
+    '02-27' => ['NP', 'sv. Řehoře z Nareku', null],
+    '03-04' => ['NP', 'sv. Kazimíra', null],
+    '03-07' => ['P', 'sv. Perpetuy a Felicity', '03_07.htm'],
+    '03-08' => ['NP', 'sv. Jana z Boha', null],
+    '03-09' => ['NP', 'sv. Františky Římské', null],
+    '03-10' => ['NP', 'sv. Jana Ogilvie', null],
+    '03-17' => ['NP', 'sv. Patrika', null],
+    '03-18' => ['NP', 'sv. Cyrila Jeruzalémského', null],
+    '03-19' => ['S', 'sv. Josefa', '03_19.htm'],
+    '03-23' => ['NP', 'sv. Turibia z Mongroveja', null],
+    '03-25' => ['S', 'Zvěstování Páně', '03_25.htm'],
+    '04-02' => ['NP', 'sv. Františka z Pauly', null],
+    '04-04' => ['NP', 'sv. Izidora', null],
+    '04-05' => ['NP', 'sv. Vincence Ferrerského', null],
+    '04-07' => ['P', 'sv. Jana Křtitele de la Salle', '04_07.htm'],
+    '04-11' => ['P', 'sv. Stanislava', '04_11.htm'],
+    '04-13' => ['NP', 'sv. Martina I.', null],
+    '04-21' => ['NP', 'sv. Anselma', null],
+    '04-23' => ['SV', 'sv. Vojtěcha', '04_23.htm'],
+    '04-24' => ['NP', 'sv. Jiřího', null],
+    '04-25' => ['SV', 'sv. Marka', '04_25.htm'],
+    '04-28' => ['NP', 'sv. Petra Chanela', null],
+    '04-29' => ['SV', 'sv. Kateřiny Sienské', '04_29.htm'],
+    '04-30' => ['NP', 'sv. Zikmunda', null],
+    '05-01' => ['NP', 'sv. Josefa, Dělníka', null],
+    '05-02' => ['P', 'sv. Atanáše', '05_02.htm'],
+    '05-03' => ['SV', 'sv. Filipa a Jakuba', '05_03.htm'],
+    '05-06' => ['NP', 'sv. Jana Sarkandra', '05_06.htm'],
+    '05-08' => ['NP', 'Panny Marie, Prostřednice všech milostí', null],
+    '05-10' => ['NP', 'sv. Jana z Avily', null],
+    '05-12' => ['NP', 'sv. Nerea a Achillea', null],
+    '05-13' => ['NP', 'Panny Marie Fatimské', null],
+    '05-14' => ['SV', 'sv. Matěje', '05_14.htm'],
+    '05-16' => ['SV', 'sv. Jana Nepomuckého', '05_16.htm'],
+    '05-18' => ['NP', 'sv. Jana I.', null],
+    '05-20' => ['NP', 'sv. Klementa Marie Hofbauera', '05_20.htm'],
+    '05-21' => ['NP', 'sv. Kryštofa Magallanese a druhů', null],
+    '05-22' => ['NP', 'sv. Rity z Cascie', null],
+    '05-25' => ['NP', 'sv. Bedy Ctihodného', null],
+    '05-26' => ['P', 'sv. Filipa Neriho', '05_26.htm'],
+    '05-27' => ['NP', 'sv. Augustina z Canterbury', null],
+    '05-29' => ['NP', 'sv. Pavla VI.', null],
+    '05-30' => ['NP', 'sv. Zdislavy', '05_30.htm'],
+    '05-31' => ['SV', 'Navštívení Panny Marie', '05_31.htm'],
+    '06-01' => ['P', 'sv. Justina', '06_01.htm'],
+    '06-02' => ['NP', 'sv. Marcelina a Petra', null],
+    '06-03' => ['P', 'sv. Karla Lwangy a druhů', '06_03.htm'],
+    '06-05' => ['P', 'sv. Bonifáce', '06_05.htm'],
+    '06-06' => ['NP', 'sv. Norberta', null],
+    '06-09' => ['NP', 'sv. Efréma', null],
+    '06-11' => ['P', 'sv. Barnabáše', '06_11.htm'],
+    '06-13' => ['P', 'sv. Antonína z Padovy', '06_13.htm'],
+    '06-15' => ['NP', 'sv. Víta', null],
+    '06-19' => ['NP', 'sv. Jana Nepomuckého Neumanna', null],
+    '06-21' => ['P', 'sv. Aloise Gonzagy', '06_21.htm'],
+    '06-22' => ['NP', 'sv. Paulína Nolánského', null],
+    '06-24' => ['S', 'Narození sv. Jana Křtitele', '06_24.htm'],
+    '06-27' => ['NP', 'sv. Cyrila Alexandrijského', null],
+    '06-28' => ['P', 'sv. Ireneje', '06_28.htm'],
+    '06-29' => ['S', 'sv. Petra a Pavla', '06_29.htm'],
+    '06-30' => ['NP', 'Svatých prvomučedníků římských', null],
+    '07-03' => ['SV', 'sv. Tomáše', '07_03.htm'],
+    '07-04' => ['NP', 'sv. Prokopa', '07_04.htm'],
+    '07-05' => ['S', 'sv. Cyrila a Metoděje', '07_05.htm'],
+    '07-06' => ['NP', 'sv. Marie Gorettiové', null],
+    '07-09' => ['NP', 'sv. Augustina Žao Ronga, kněze a druhů', null],
+    '07-11' => ['SV', 'sv. Benedikta', '07_11.htm'],
+    '07-13' => ['NP', 'sv. Jindřicha', null],
+    '07-14' => ['NP', 'bl. Hroznaty', null],
+    '07-15' => ['P', 'sv. Bonaventury', '07_15.htm'],
+    '07-16' => ['NP', 'Panny Marie Karmelské', null],
+    '07-17' => ['NP', 'bl. Česlava a sv. Hyacinta', null],
+    '07-20' => ['NP', 'sv. Apolináře', null],
+    '07-21' => ['NP', 'sv. Vavřince z Brindisi', null],
+    '07-22' => ['SV', 'sv. Marie Magdalény', '07_22.htm'],
+    '07-23' => ['SV', 'sv. Brigity', '07_23.htm'],
+    '07-24' => ['NP', 'sv. Šarbela Machlúfa', null],
+    '07-25' => ['SV', 'sv. Jakuba', '07_25.htm'],
+    '07-26' => ['P', 'sv. Jáchyma a Anny', '07_26.htm'],
+    '07-27' => ['NP', 'sv. Gorazda a druhů', '07_27.htm'],
+    '07-29' => ['P', 'sv. Marty, Marie a Lazara', '07_29.htm'],
+    '07-30' => ['NP', 'sv. Petra Chryzologa', null],
+    '07-31' => ['P', 'sv. Ignáce z Loyoly', '07_31.htm'],
+    '08-01' => ['P', 'sv. Alfonsa Marie z Liguori', '08_01.htm'],
+    '08-02' => ['NP', 'sv. Eusebia z Vercelli', null],
+    '08-04' => ['P', 'sv. Jana Marie Vianneye', '08_04.htm'],
+    '08-05' => ['NP', 'Posvěcení římské baziliky Panny Marie', null],
+    '08-06' => ['SV', 'Proměnění Páně', '08_06.htm'],
+    '08-07' => ['NP', 'sv. Sixta II.', null],
+    '08-08' => ['P', 'sv. Dominika', '08_08.htm'],
+    '08-09' => ['SV', 'sv. Terezie Benedikty od Kříže', '08_09.htm'],
+    '08-10' => ['SV', 'sv. Vavřince', '08_10.htm'],
+    '08-11' => ['P', 'sv. Kláry', '08_11.htm'],
+    '08-12' => ['NP', 'sv. Jany Františky de Chantal', null],
+    '08-13' => ['NP', 'sv. Ponciána, papeže, a Hippolyta, kněze', null],
+    '08-14' => ['P', 'sv. Maxmiliána Maria Kolbeho', '08_14.htm'],
+    '08-15' => ['S', 'Nanebevzetí Panny Marie', '08_15.htm'],
+    '08-16' => ['NP', 'sv. Štěpána Uherského', null],
+    '08-19' => ['NP', 'sv. Jana Eudese', null],
+    '08-20' => ['P', 'sv. Bernarda', '08_20.htm'],
+    '08-21' => ['P', 'sv. Pia X.', '08_21.htm'],
+    '08-22' => ['P', 'Panny Marie Královny', '08_22.htm'],
+    '08-23' => ['NP', 'sv. Růženy z Limy', null],
+    '08-24' => ['SV', 'sv. Bartoloměje', '08_24.htm'],
+    '08-25' => ['NP', 'sv. Benedikta, Jana, Matouše, Izáka a Kristina', null],
+    '08-27' => ['P', 'sv. Moniky', '08_27.htm'],
+    '08-28' => ['P', 'sv. Augustina', '08_28.htm'],
+    '08-29' => ['P', 'Umučení sv. Jana Křtitele', '08_29.htm'],
+    '09-03' => ['P', 'sv. Řehoře Velikého', '09_03.htm'],
+    '09-07' => ['NP', 'sv. Melichara Grodeckého', null],
+    '09-08' => ['SV', 'Narození Panny Marie', '09_08.htm'],
+    '09-09' => ['NP', 'sv. Petra Klavera', null],
+    '09-10' => ['NP', 'bl. Karla Spinoly', null],
+    '09-12' => ['NP', 'Jména Panny Marie', null],
+    '09-13' => ['P', 'sv. Jana Zlatoústého', '09_13.htm'],
+    '09-14' => ['SV', 'Povýšení sv. Kříže', '09_14.htm'],
+    '09-15' => ['P', 'Panny Marie Bolestné', '09_15.htm'],
+    '09-16' => ['P', 'sv. Ludmily', '09_16.htm'],
+    '09-17' => ['NP', 'sv. Kornélia a Cypriána', null],
+    '09-19' => ['NP', 'sv. Januária', null],
+    '09-20' => ['P', 'sv. Ondřeje Kim Taegona, Pavla Chong Hasanga a druhů', '09_20.htm'],
+    '09-21' => ['SV', 'sv. Matouše', '09_21.htm'],
+    '09-23' => ['P', 'sv. Pia z Pietrelciny', '09_23.htm'],
+    '09-26' => ['NP', 'sv. Kosmy a Damiána', null],
+    '09-27' => ['P', 'sv. Vincence z Pauly', '09_27.htm'],
+    '09-28' => ['S', 'sv. Václava', '09_28.htm'],
+    '09-29' => ['SV', 'sv. Michaela, Gabriela a Rafaela', '09_29.htm'],
+    '09-30' => ['P', 'sv. Jeronýma', '09_30.htm'],
+    '10-01' => ['P', 'sv. Terezie od Dítěte Ježíše', '10_01.htm'],
+    '10-02' => ['P', 'svatých andělů strážných', '10_02.htm'],
+    '10-04' => ['P', 'sv. Františka z Assisi', '10_04.htm'],
+    '10-05' => ['NP', 'sv. Faustiny Kowalské', null],
+    '10-06' => ['NP', 'sv. Bruna', null],
+    '10-07' => ['P', 'Panny Marie Růžencové', '10_07.htm'],
+    '10-09' => ['NP', 'sv. Dionýsia a druhů', null],
+    '10-11' => ['NP', 'sv. Jana XXIII.', null],
+    '10-12' => ['NP', 'sv. Radima', null],
+    '10-14' => ['NP', 'sv. Kalista I.', null],
+    '10-15' => ['P', 'sv. Terezie od Ježíše', '10_15.htm'],
+    '10-16' => ['NP', 'sv. Hedviky', null],
+    '10-17' => ['P', 'sv. Ignáce Antiochijského', '10_17.htm'],
+    '10-18' => ['SV', 'sv. Lukáše', '10_18.htm'],
+    '10-19' => ['NP', 'sv. Jana de Brébeuf a Izáka Joguese a druhů', null],
+    '10-21' => ['NP', 'bl. Karla Rakouského', null],
+    '10-22' => ['NP', 'sv. Jana Pavla II.', null],
+    '10-23' => ['NP', 'sv. Jana Kapistránského', null],
+    '10-24' => ['NP', 'sv. Antonína Marie Klareta', null],
+    '10-28' => ['SV', 'sv. Šimona a Judy', '10_28.htm'],
+    '10-31' => ['NP', 'sv. Wolfganga', null],
+    '11-01' => ['S', 'Všech svatých', '11_01.htm'],
+    '11-03' => ['NP', 'sv. Martina de Porres', null],
+    '11-04' => ['P', 'sv. Karla Boromejského', '11_04.htm'],
+    '11-09' => ['SV', 'Posvěcení lateránské baziliky', '11_09.htm'],
+    '11-10' => ['P', 'sv. Lva Velikého', '11_10.htm'],
+    '11-11' => ['P', 'sv. Martina', '11_11.htm'],
+    '11-12' => ['P', 'sv. Josafata', '11_12.htm'],
+    '11-13' => ['P', 'sv. Anežky České', '11_13.htm'],
+    '11-15' => ['NP', 'sv. Alberta Velikého', null],
+    '11-16' => ['NP', 'sv. Markéty Skotské', null],
+    '11-17' => ['P', 'sv. Alžběty Uherské', '11_17.htm'],
+    '11-18' => ['NP', 'Posvěcení římských bazilik svatých apoštolů Petra a Pavla', null],
+    '11-21' => ['P', 'Zasvěcení Panny Marie v Jeruzalémě', '11_21.htm'],
+    '11-22' => ['P', 'sv. Cecílie', '11_22.htm'],
+    '11-23' => ['NP', 'sv. Klementa I.', null],
+    '11-24' => ['P', 'sv. Ondřeje Dung-Laca a druhů', '11_24.htm'],
+    '11-25' => ['NP', 'sv. Kateřiny Alexandrijské', null],
+    '11-30' => ['SV', 'sv. Ondřeje', '11_30.htm'],
+];
 
 /** Pevné slavnosti (a svátky Páně přebíjející neděli v mezidobí). */
 function pevneSlavnosti(): array
@@ -142,6 +366,44 @@ function cisloTydneMezidobi(DateTimeImmutable $s): ?int
     return null;
 }
 
+/** Slavnosti a svátky ze sanktorálu (se stránkou), které se nabízejí ve všední den. */
+function sanktoralniSvatky(): array
+{
+    $vysl = [];
+    foreach (SANKTORAL as $md => [$hodnost, $nazev, $stranka]) {
+        if ($stranka === null || !in_array($hodnost, ['S', 'SV'], true)) { continue; }
+        $vysl[$md] = [$nazev, odkaz('08sanctoral', $stranka), $hodnost === 'S' ? 'slavnost' : 'svatek'];
+    }
+    return $vysl;
+}
+
+/**
+ * Památka svatého ve všední den, nebo null. Povinné památky se slaví vždy (kromě adventu od 17. 12.,
+ * půstu, oktávů); nepovinné jen podle nastavení 'vzpominky'. Bez vlastní stránky se použijí feriální
+ * čtení a v bohoslužbě je upozornění, že vlastní modlitby doplní uživatel z misálu.
+ */
+function pamatkaDne(DateTimeImmutable $d, array $cfg): ?array
+{
+    $md = $d->format('m-d');
+    $zaz = SANKTORAL[$md] ?? null;
+    if ($zaz === null || !in_array($zaz[0], ['P', 'NP'], true)) { return null; }
+    if ($zaz[0] === 'NP' && $cfg['vzpominky'] !== 'vsechny') { return null; }
+    $obd = obdobiDne($d);
+    $diff = dnuOd(velikonoce((int)$d->format('Y')), $d);
+    $slavi = match ($obd) {
+        'mezidobi' => true,
+        'advent' => $md < '12-17',
+        'vanoce' => $md >= '01-02' && $md <= '01-12' && !in_array($md, ['01-06'], true),
+        'velikonoce' => $diff >= 7,
+        default => false,
+    };
+    if (!$slavi) { return null; }
+    $f = feriePodleObdobi($d);
+    if ($f === null) { return null; }
+    $odkaz = $zaz[2] !== null ? odkaz('08sanctoral', $zaz[2]) : $f['odkaz'];
+    return den($zaz[1], $odkaz, 'pamatka', $obd, $f['cyklus'], ['pamatka_bez_stranky' => $zaz[2] === null]);
+}
+
 /** Co se slaví dané datum (jen neděle a vybrané slavnosti), nebo null. */
 function popisDne(DateTimeImmutable $d, array $cfg): ?array
 {
@@ -152,7 +414,9 @@ function popisDne(DateTimeImmutable $d, array $cfg): ?array
     $diff = dnuOd($e, $d);
     $adv = adventZacatek($y);
     $rok = cyklus($d);
-    $sl = pevneSlavnosti();
+    // Neděli přebíjejí jen pevné slavnosti a svátky Páně; svátky svatých jen všední den ($sl)
+    $pevne = pevneSlavnosti();
+    $sl = $pevne + sanktoralniSvatky();
 
     // Pohyblivé slavnosti a neděle velikonočního okruhu
     if ($diff === 0) { return den('Neděle Zmrtvýchvstání Páně', odkaz('04triduum', '05vzkriseni.htm'), 'nedele', 'velikonoce', $rok); }
@@ -188,8 +452,8 @@ function popisDne(DateTimeImmutable $d, array $cfg): ?array
         if ($diff === -7) { return den('Květná neděle', odkaz('03pust', '06_00.htm'), 'nedele', 'pust', $rok, ['pasije' => true]); }
 
         // Pevné slavnosti, které přebíjejí neděli v mezidobí a o Vánocích
-        if (isset($sl[$md])) {
-            [$nazev, $odk, $h] = $sl[$md];
+        if (isset($pevne[$md])) {
+            [$nazev, $odk, $h] = $pevne[$md];
             return den($nazev, $odk, $h, obdobiDne($d), $rok);
         }
         // Vánoce
@@ -225,6 +489,11 @@ function popisDne(DateTimeImmutable $d, array $cfg): ?array
     $diffTriduum = dnuOd(velikonoce($y), $d);
     if ($diffTriduum === -3) { return den('Zelený čtvrtek', odkaz('04triduum', '01ctvrtek.htm'), 'slavnost', 'pust', $rok, ['kredo' => false]); }
     if ($diffTriduum === -2) { return den('Velký pátek', odkaz('04triduum', '02patek.htm'), 'triduum', 'pust', $rok, ['pasije' => true]); }
+    // Velká sobota: velikonoční vigilie (večer), sedm čtení a epištola
+    if ($diffTriduum === -1) { return den('Velikonoční vigilie', odkaz('04triduum', '04vigilie_2.htm'), 'slavnost', 'velikonoce', $rok, ['vigilie' => true, 'kredo' => false]); }
+    // Památka svatého (povinná, případně i nepovinná podle nastavení)
+    $pam = pamatkaDne($d, $cfg);
+    if ($pam !== null) { return $pam; }
     // Všední den bez slavnosti: text ze stránky podle období
     $f = feriePodleObdobi($d);
     if ($f !== null) { return den($f['nazev'], $f['odkaz'], 'ferie', obdobiDne($d), $f['cyklus']); }
@@ -527,8 +796,14 @@ function jePasazCitace(string $t): bool
 /** Vybere sekce pro daný rok A/B/C. */
 function vyberCteni(array $sekce, string $rok): array
 {
-    $spolecne = []; $podleRoku = []; $aktRok = null;
+    $spolecne = []; $podleRoku = []; $aktRok = null; $vEvangelium = false;
     foreach ($sekce as $s) {
+        // „Evangelium podle ročního cyklu“: tlačítka „A: Mt 17,1–9“ jsou evangelia pro daný rok
+        if (preg_match('~^Evangelium podle ročního cyklu~iu', $s['nazev'])) { $vEvangelium = true; continue; }
+        if ($vEvangelium && preg_match('~^([ABC]):\s*(.+)$~u', $s['nazev'], $m)) {
+            $podleRoku[$m[1]]['evangelium'] = $s + ['nazev' => 'Evangelium – ' . $m[2]];
+            continue;
+        }
         if (preg_match('~v roce ([ABC])\b~u', $s['nazev'], $m)) { $aktRok = $m[1]; continue; }
         // Všední dny: dva rozbalovací cykly (feriální I a II); verš a evangelium jsou společné
         if (preg_match('~^Roční cyklus ([12])$~u', $s['nazev'], $m)) { $aktRok = $m[1] === '1' ? 'I' : 'II'; continue; }
@@ -536,6 +811,8 @@ function vyberCteni(array $sekce, string $rok): array
         if (preg_match('~ v cyklu [ABC]$~u', $s['nazev'])) { continue; }
         $typ = typSekce($s['nazev']);
         if ($typ !== null) {
+            // prázdný nadpis bez textu (např. „1. čtení a žalm“) nebere místo skutečnému čtení
+            if (!$s['radky']) { continue; }
             if ($aktRok !== null && !(in_array($aktRok, ['I', 'II'], true) && in_array($typ, ['verš', 'evangelium'], true))) {
                 $podleRoku[$aktRok][$typ] = $s;
             } elseif (!isset($spolecne[$typ])) { $spolecne[$typ] = $s; }
@@ -562,6 +839,7 @@ function vyberCteni(array $sekce, string $rok): array
     return $vysl;
 }
 
+/** Text první sekce, jejíž nadpis sedí na regex a která má text (prázdné nadpisy se přeskočí). */
 function sekceTextu(array $sekce, string $regex): ?string
 {
     foreach ($sekce as $s) {
@@ -570,7 +848,7 @@ function sekceTextu(array $sekce, string $regex): ?string
             foreach ($s['radky'] as $r) { $t[] = $r['t']; }
             $txt = trim(implode(' ', $t));
             $txt = preg_replace('~\s*Amen\.?\s*$~u', '', $txt);
-            return $txt !== '' ? $txt : null;
+            if ($txt !== '') { return $txt; }
         }
     }
     return null;
@@ -628,6 +906,46 @@ function rozborVerse(array $s): array
     return ['citace' => $citace, 'text' => $text, 'bez_aleluja' => $bezAleluja];
 }
 
+/**
+ * Čtení velikonoční vigilie: 1.–7. čtení s žalmy a modlitbami, pak epištola s žalmem.
+ * Evangelium se nebere tady (vybírá se podle roku A/B/C jako jinde).
+ */
+function ctenyVigilie(array $sekce): array
+{
+    $vysl = []; $posledni = null;
+    foreach ($sekce as $s) {
+        $nazev = $s['nazev'];
+        if ((preg_match('~^\d\.\s*čtení~iu', $nazev) || preg_match('~^Epištola~iu', $nazev)) && $s['radky']) {
+            $vysl[] = rozborCteni($s) + ['zalm' => null, 'modlitba' => null];
+            $posledni = count($vysl) - 1;
+        } elseif (preg_match('~^Mezizpěv~iu', $nazev) && $posledni !== null && $vysl[$posledni]['zalm'] === null) {
+            $vysl[$posledni]['zalm'] = rozborZalmu($s);
+        } elseif ($nazev === 'Modlitba' && $posledni !== null && $vysl[$posledni]['modlitba'] === null && $s['radky']) {
+            $vysl[$posledni]['modlitba'] = implode(' ', array_map(fn($r) => $r['t'], $s['radky']));
+        } elseif (preg_match('~^Evangelium~iu', $nazev)) {
+            break;
+        }
+    }
+    return $vysl;
+}
+
+/**
+ * Čtení nabízené jako „1. čtení – X nebo Y“: nadpis je prázdný a texty jsou v tlačítkách „X“, „Y“.
+ * Vezme se první tlačítko (hlavní varianta), jeho text se přejmenuje na citaci.
+ */
+function prvniNabidkaCteni(array $sekce): ?array
+{
+    foreach ($sekce as $i => $s) {
+        if (typSekce($s['nazev']) !== 'cteni1' || $s['radky']) { continue; }
+        for ($j = $i + 1; $j < count($sekce) && $j <= $i + 4; $j++) {
+            if ($sekce[$j]['radky'] && typSekce($sekce[$j]['nazev']) === null) {
+                return ['nazev' => '1. čtení – ' . $sekce[$j]['nazev'], 'uroven' => $sekce[$j]['uroven'], 'radky' => $sekce[$j]['radky']];
+            }
+        }
+    }
+    return null;
+}
+
 /** Vrátí všechny vlastní texty dne. Chybějící části zůstanou null a přidají se do 'chyby'. */
 function nactiTexty(array $prilezitost, array $cfg): array
 {
@@ -661,14 +979,29 @@ function nactiTexty(array $prilezitost, array $cfg): array
     // pokyn před textem modlitby („(Neříká se Modleme se)“) nepatří do modlitby
     if ($vysl['vstupni'] !== null) { $vysl['vstupni'] = trim(preg_replace('~^\([^)]*\)\s*~u', '', $vysl['vstupni'])); }
     $vysl['po_prijimani'] = sekceTextu($sekce, '~^Modlitba po přijímání~iu');
-    $vyber = vyberCteni($sekce, $prilezitost['rok']);
-    if ($vyber['cteni1']) { $vysl['cteni1'] = rozborCteni($vyber['cteni1']); }
-    if ($vyber['cteni2']) { $vysl['cteni2'] = rozborCteni($vyber['cteni2']); }
-    if ($vyber['zalm']) { $vysl['zalm'] = rozborZalmu($vyber['zalm']); }
-    if ($vyber['verš']) { $vysl['verš'] = rozborVerse($vyber['verš']); }
-    if ($vyber['evangelium']) { $vysl['evangelium'] = rozborCteni($vyber['evangelium']); }
-    foreach (['vstupni' => 'vstupní modlitba', 'po_prijimani' => 'modlitba po přijímání', 'cteni1' => '1. čtení', 'zalm' => 'žalm', 'verš' => 'verš před evangeliem', 'evangelium' => 'evangelium'] as $k => $popis) {
-        if (empty($vysl[$k])) { $vysl['chyby'][] = "chybí: $popis"; }
+    // Vigilie: osm čtení (1.–7. a epištola) s žalmy a modlitbami; evangelium jako jinde
+    if (!empty($prilezitost['vigilie'])) {
+        $vysl['cteni_vigilie'] = ctenyVigilie($sekce);
+        $vyber = vyberCteni($sekce, $prilezitost['rok']);
+        if ($vyber['evangelium']) { $vysl['evangelium'] = rozborCteni($vyber['evangelium']); }
+        if (count($vysl['cteni_vigilie']) < 8) { $vysl['chyby'][] = 'chybí: některá čtení vigilie (doplňte z misálu)'; }
+        if (empty($vysl['evangelium'])) { $vysl['chyby'][] = 'chybí: evangelium'; }
+        return $vysl;
+    }
+    // Obřad zesnulých (2. 11.) má více mešních formulářů s různými čteními; na jejich výběr se neodhaduje
+    $zesnuli = ($prilezitost['hodnost'] ?? '') === 'zesnuli';
+    $vyber = $zesnuli ? [] : vyberCteni($sekce, $prilezitost['rok']);
+    if (!$zesnuli && empty($vyber['cteni1'])) { $vyber['cteni1'] = prvniNabidkaCteni($sekce); }
+    if ($vyber['cteni1'] ?? null) { $vysl['cteni1'] = rozborCteni($vyber['cteni1']); }
+    if ($vyber['cteni2'] ?? null) { $vysl['cteni2'] = rozborCteni($vyber['cteni2']); }
+    if ($vyber['zalm'] ?? null) { $vysl['zalm'] = rozborZalmu($vyber['zalm']); }
+    if ($vyber['verš'] ?? null) { $vysl['verš'] = rozborVerse($vyber['verš']); }
+    if ($vyber['evangelium'] ?? null) { $vysl['evangelium'] = rozborCteni($vyber['evangelium']); }
+    $kontrola = ['vstupni' => 'vstupní modlitba', 'po_prijimani' => 'modlitba po přijímání', 'cteni1' => '1. čtení', 'zalm' => 'žalm', 'verš' => 'verš před evangeliem', 'evangelium' => 'evangelium'];
+    $spolecneTexty = false;
+    foreach ($sekce as $s) { if (str_contains($s['nazev'], 'společných')) { $spolecneTexty = true; break; } }
+    foreach ($kontrola as $k => $popis) {
+        if (empty($vysl[$k])) { $vysl['chyby'][] = "chybí: $popis" . ($spolecneTexty ? ' (stránka odkazuje na společné texty, doplňte z misálu)' : ''); }
     }
     return $vysl;
 }
@@ -744,21 +1077,51 @@ function radkySlova(array $p, array $t): array
         $r[] = ['Vš', 'Aleluja.'];
     }
 
-    $e = $t['evangelium'] ?? null;
-    $r[] = ['pokyn', 'Evangelium. Stojí. Bez „Pán s vámi“, bez kadidla a bez kříže nad knihou.' . ($e && $e['citace'] ? ' (' . $e['citace'] . ')' : '')];
-    $r[] = ['P', $e && $e['uvod'] ? $e['uvod'] : 'Slova svatého evangelia podle ...'];
-    $r[] = ['Vš', 'Sláva tobě, Pane.'];
-    $r[] = ['P', vlastni($e['text'] ?? null, 'VLASTNÍ TEXT - EVANGELIUM.')];
-    $r[] = ['P', 'Slyšeli jsme slovo Boží.'];
-    $r[] = ['Vš', 'Chvála tobě, Kriste.'];
-    $r[] = ['pokyn', 'Homilie. Lid sedí. Z knížky Minutěnky, nebo z breviáře (modlitba se čtením daného dne).'];
-    $r[] = ['pokyn', 'P čte kázání z knížky. – chvíle ticha –'];
+    $r = array_merge($r, radkyEvangelium($t));
     if ($p['kredo']) {
         $r[] = ['pokyn', 'Krédo. Stojí. Může se zpívat.'];
         $r[] = ['P', 'Povstaňme a vyznejme svou víru.'];
         $r[] = ['Vš', KREDO];
     }
     return $r;
+}
+
+/** Evangelium a homilie (společné pro běžnou bohoslužbu slova i vigilii). */
+function radkyEvangelium(array $t): array
+{
+    $e = $t['evangelium'] ?? null;
+    return [
+        ['pokyn', 'Evangelium. Stojí. Bez „Pán s vámi“, bez kadidla a bez kříže nad knihou.' . ($e && $e['citace'] ? ' (' . $e['citace'] . ')' : '')],
+        ['P', $e && $e['uvod'] ? $e['uvod'] : 'Slova svatého evangelia podle ...'],
+        ['Vš', 'Sláva tobě, Pane.'],
+        ['P', vlastni($e['text'] ?? null, 'VLASTNÍ TEXT - EVANGELIUM.')],
+        ['P', 'Slyšeli jsme slovo Boží.'],
+        ['Vš', 'Chvála tobě, Kriste.'],
+        ['pokyn', 'Homilie. Lid sedí. Z knížky Minutěnky, nebo z breviáře (modlitba se čtením daného dne).'],
+        ['pokyn', 'P čte kázání z knížky. – chvíle ticha –'],
+    ];
+}
+
+/** Velikonoční vigilie: sedm čtení s žalmy a modlitbami, epištola, pak Aleluja a evangelium. */
+function radkyVigilie(array $t): array
+{
+    $r = [];
+    $cisla = ['1.', '2.', '3.', '4.', '5.', '6.', '7.'];
+    foreach ($t['cteni_vigilie'] ?? [] as $i => $c) {
+        $vedle = $cisla[$i] ?? 'Epištola';
+        $r[] = ['pokyn', ($i < 7 ? "$vedle čtení." : 'Epištola.') . ($c['citace'] ? ' (' . $c['citace'] . ')' : '')];
+        $r[] = ['L', $c['uvod'] ?: 'Čtení z ...'];
+        $r[] = ['L', vlastni($c['text'] ?? null, 'VLASTNÍ TEXT - ' . ($i < 7 ? "$vedle ČTENÍ" : 'EPIŠTOLA') . '.')];
+        $r[] = ['L', 'Slyšeli jsme slovo Boží.'];
+        $r[] = ['Vš', 'Bohu díky.'];
+        if (!empty($c['zalm'])) {
+            $cislo = zalmCislo($c['zalm']['citace'] ?? '');
+            $r[] = ['pokyn', 'Žalm. Zpívá Honza nebo varhanice Lenka. Lid sedí. ' . ($cislo !== '' ? "($cislo) – text a nápěv v Korejsovi." : '(doplňte z misálu.)')];
+        }
+        if (!empty($c['modlitba'])) { $r[] = ['P', vlastni($c['modlitba'], 'VLASTNÍ MODLITBA.')]; }
+    }
+    $r[] = ['pokyn', 'Zpěv Aleluja. Stojí všichni. Aleluja se zpívá třikrát, zpěvák začíná, ostatní opakují. Verš v misálu není, zpívá se jen Aleluja.'];
+    return array_merge($r, radkyEvangelium($t));
 }
 
 function radkyUvod(array $p, array $t): array
@@ -852,12 +1215,21 @@ function bohosluzbaHtml(array $p, array $t): string
         $hlava .= '<p class="chyba"><b>Pozor:</b> ' . h(implode('; ', $t['chyby'])) . '. Doplňte ručně nebo zkontrolujte stránku na liturgie.cz.</p>';
     }
     if ($p['hodnost'] === 'zesnuli') {
-        $hlava .= '<p class="chyba"><b>Pozor:</b> vzpomínka na zemřelé má vlastní formulář; ověřte, že je tento rozpis pro vaše slavení vhodný.</p>';
+        $hlava .= '<p class="chyba"><b>Pozor:</b> vzpomínka na zemřelé má tři mešní formuláře s různými čteními a evangelii. Vyberte formulář v misálu a čtení doplňte ručně (zde jsou prázdná místa).</p>';
+    }
+    if (!empty($p['pamatka_bez_stranky'])) {
+        $hlava .= '<p class="chyba"><b>Pozor:</b> památka ' . h($p['nazev']) . ' nemá na liturgie.cz vlastní stránku. Vstupní modlitba, orace a čtení jsou feriální; vlastní texty doplňte z misálu.</p>';
     }
     $hlava .= '</header>';
     $out = [$hlava];
-    $out[] = sekceHtml('Úvodní obřady', tabulka(radkyUvod($p, $t)));
-    $out[] = sekceHtml('Bohoslužba slova', tabulka(radkySlova($p, $t)));
+    if (!empty($p['vigilie'])) {
+        // Vigilie začíná obřadem světla a křestní částí; tady je jen bohoslužba slova
+        $out[] = sekceHtml('Úvodní obřady', tabulka([['pokyn', 'Obřad světla (velikonoční svíce, Exultet) a úvodní část vigilie podle misálu. Tady je bohoslužba slova.']]));
+        $out[] = sekceHtml('Bohoslužba slova', tabulka(radkyVigilie($t)));
+    } else {
+        $out[] = sekceHtml('Úvodní obřady', tabulka(radkyUvod($p, $t)));
+        $out[] = sekceHtml('Bohoslužba slova', tabulka(radkySlova($p, $t)));
+    }
     $out[] = sekceHtml('Přímluvy z modré knížky', '<p><em>VLASTNÍ TEXT PŘÍMLUV.</em></p>');
     $out[] = sekceHtml('Varianta A: bez Vlasty a Honzy (duchovní přijímání)', tabulka(radkyVarA()));
     $out[] = sekceHtml('Varianta B: když vede Vlasta nebo Honza (se svatým přijímáním)', tabulka(radkyVarB($t)));
@@ -894,6 +1266,15 @@ function stranka(array $p, array $cfg, bool $web = false, ?array $upravy = null,
     $t = uplatniUpravy(nactiTexty($p, $cfg), $upravy['texty'] ?? []);
     $t['zalm_cislo'] = zalmCislo($t['zalm']['citace'] ?? '');
     $t['korejs'] = $t['zalm_cislo'] !== '' ? korejsOdkaz($t['zalm']['citace'], $p['rok'], $p['nazev'], $cfg) : null;
+    if (!empty($p['vigilie'])) {
+        // každý žalm vigilie má vlastní nápěv na Korejsovi
+        $t['zalmy_korejs'] = [];
+        foreach ($t['cteni_vigilie'] ?? [] as $c) {
+            $cislo = zalmCislo($c['zalm']['citace'] ?? '');
+            if ($cislo === '') { continue; }
+            $t['zalmy_korejs'][] = ['cislo' => $cislo, 'url' => korejsOdkaz($c['zalm']['citace'], '', $p['nazev'], $cfg)];
+        }
+    }
     $zakladni = preg_match('~^https?://~', $cfg['zdroj']) ? rtrim($cfg['zdroj'], '/') . '/' : 'https://m.liturgie.cz/misal/';
     $nadpis = 'Bohoslužba slova ' . cesDatum($p['datum']);
     $uvod = '<h1>' . h($nadpis) . '</h1>' . ($formular ?? '')
@@ -917,7 +1298,7 @@ function nastaveniUrl(array $cfg): string
 function krabiceMse(array $p, array $t, bool $web, ?array $upravy, array $cfg): string
 {
     $datum = $p['datum']->format('Y-m-d');
-    $nazvy = castyUpravy();
+    $nazvy = castyUpravy(!empty($p['vigilie']));
     $tisk = false; $stav = '';
     if ($upravy !== null) {
         $ruc = array_map(fn($k) => $nazvy[$k][0], array_keys($upravy['texty']));
@@ -930,7 +1311,12 @@ function krabiceMse(array $p, array $t, bool $web, ?array $upravy, array $cfg): 
     $zdroj = '<a href="' . h((string)$t['zdroj_url']) . '" target="_blank" rel="noopener">' . h((string)$t['zdroj_url']) . '</a>';
     $r[] = '<p>Zdroj textů: ' . $zdroj . (!empty($p['pasije']) ? ' (včetně pašijí)' : '') . '</p>';
     if ($web) { $r[] = '<p><a class="tlacitko" href="' . h('?uprava=' . $datum . '&' . nastaveniUrl($cfg)) . '">Zkontrolovat texty</a></p>'; }
-    if ($t['zalm_cislo'] !== '') {
+    if (!empty($t['zalmy_korejs'])) {
+        $odkazy = array_map(fn($z) => $z['url'] !== null
+            ? h('Žl ' . preg_replace('~^Žl?\s*~u', '', $z['cislo'])) . ' (<a href="' . h($z['url']) . '" target="_blank" rel="noopener">Korejs</a>)'
+            : h($z['cislo']), $t['zalmy_korejs']);
+        $r[] = '<p>Žalmy vigilie (zpívá Honza nebo varhanice Lenka): ' . implode(', ', $odkazy) . '.</p>';
+    } elseif ($t['zalm_cislo'] !== '') {
         $zalm = '<p>Žalm ' . h($t['zalm_cislo']) . ' – zpívá Honza nebo varhanice Lenka. ';
         $zalm .= $t['korejs'] !== null
             ? '<a class="tlacitko" href="' . h($t['korejs']) . '" target="_blank" rel="noopener">Tisk žalmu (Korejs)</a>'
@@ -958,8 +1344,16 @@ button { font: inherit; padding: 4pt 10pt; }
 CSS;
 
 /** Části bohoslužby, které lze zkontrolovat a přepsat: klíč => [nadpis, popis v hlášce „chybí“]. */
-function castyUpravy(): array
+function castyUpravy(bool $vigilie = false): array
 {
+    // Vigilie: osm čtení místo jednoho (1.–7. čtení a epištola), evangelium se kontroluje také
+    if ($vigilie) {
+        $vysl = [];
+        for ($i = 1; $i <= 7; $i++) { $vysl["vig$i"] = ["$i. čtení", "$i. čtení"]; }
+        $vysl['vigep'] = ['Epištola', null];
+        $vysl['evangelium'] = ['Evangelium', 'evangelium'];
+        return $vysl;
+    }
     return [
         'vstupni' => ['Vstupní modlitba', 'vstupní modlitba'],
         'cteni1' => ['1. čtení', '1. čtení'],
@@ -979,7 +1373,8 @@ function automatickyText(string $klic, array $t): string
         'cteni1', 'cteni2', 'evangelium' => $t[$klic]['text'] ?? '',
         'zalm' => trim(($t['zalm']['refren'] ?? '') . "\n\n" . implode("\n\n", $t['zalm']['sloky'] ?? [])),
         'verš' => $t['verš']['bez_aleluja'] ?? '',
-        default => '',
+        // vigilie: vig1–vig7 jsou 1.–7. čtení, vigep je epištola
+        default => str_starts_with($klic, 'vig') ? ($t['cteni_vigilie'][$klic === 'vigep' ? 7 : (int)substr($klic, 3) - 1]['text'] ?? '') : '',
     };
 }
 
@@ -1000,8 +1395,13 @@ function uplatniUpravy(array $t, array $texty): array
             case 'verš':
                 $t['verš'] = array_merge(['citace' => ''], $t['verš'] ?? [], ['text' => $text, 'bez_aleluja' => $text]);
                 break;
+            default:
+                if (str_starts_with($klic, 'vig')) {
+                    $i = $klic === 'vigep' ? 7 : (int)substr($klic, 3) - 1;
+                    $t['cteni_vigilie'][$i] = array_merge(['citace' => '', 'uvod' => ''], $t['cteni_vigilie'][$i] ?? [], ['text' => $text]);
+                }
         }
-        $popis = castyUpravy()[$klic][1] ?? null;
+        $popis = castyUpravy(true)[$klic][1] ?? null;
         if ($popis !== null) { $t['chyby'] = array_values(array_filter($t['chyby'] ?? [], fn($c) => $c !== "chybí: $popis")); }
     }
     return $t;
@@ -1013,7 +1413,7 @@ function zFormulare(array $post): array
     $ov = is_array($post['ov'] ?? null) ? $post['ov'] : [];
     $ok = is_array($post['ok'] ?? null) ? $post['ok'] : [];
     $texty = []; $overeno = [];
-    foreach (array_keys(castyUpravy()) as $klic) {
+    foreach (array_keys(castyUpravy(true) + castyUpravy()) as $klic) {
         $text = trim(str_replace("\r\n", "\n", (string)($ov[$klic] ?? '')));
         if ($text !== '') { $texty[$klic] = $text; }
         if (!empty($ok[$klic])) { $overeno[$klic] = true; }
@@ -1030,7 +1430,7 @@ function upravaStranka(DateTimeImmutable $d, array $cfg): string
     $p['datum'] = $d;
     $t = nactiTexty($p, $cfg);
     $casti = '';
-    foreach (castyUpravy() as $klic => [$nadpis]) {
+    foreach (castyUpravy(!empty($p['vigilie'])) as $klic => [$nadpis]) {
         $auto = automatickyText($klic, $t);
         $casti .= '<section class="cast"><h3>' . h($nadpis) . '</h3>'
             . '<div class="auto"><b>Automatický text:</b><br>' . ($auto !== '' ? h($auto) : '<em>nenalezen</em>') . '</div>'
