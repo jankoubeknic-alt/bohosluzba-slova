@@ -14,12 +14,17 @@ Najde příští neděle a slavnosti, stáhne k nim vlastní texty z liturgie.cz
 - Gloria a vyznání víry jen o nedělích a slavnostech/svátcích (Gloria ne v adventu a postě); všední dny je nemají.
 - V postní době vynechá Aleluja a zpívá jen verš.
 - Všední dny v mezidobí: text ze stránky týdne (`NN_0D.htm`). Cyklus čtení je I v lichých letech a II v sudých (kalendářní rok, podle indexu liturgie.cz). Stránka ukáže „feriální cyklus I/II“. Verš a evangelium jsou společné pro oba cykly.
+- Všední dny v adventu (do 16. 12. podle týdne, 17.–24. 12. podle data), o vánocích (29.–31. 12., 2.–5. 1., 7.–12. 1.), v postě (Popeleční středa, týdny, Svatý týden po pondělí až středu) a o velikonocích (oktáv, týdny). Mají jedno čtení bez cyklu. Volitelné varianty (např. „1. čtení v cyklu A“) se nebere, použije se hlavní čtení.
+- Vstupní modlitba o vánocích má dvě znění podle data: před slavností Zjevení Páně (do 6. 1.), po ní (od 7. 1.).
 - Druhé čtení vynechá, když ho den nemá (všední dny ho nemají).
 - U bohoslužby uvede zdroj (adresu stránky na liturgie.cz) v krabičce nad textem; u Květné neděle i odkaz na pašije.
 
 ## Zatím chybí
-- Všední dny v adventu, o vánocích, v postě a velikonocích: stránky ještě nejsou napojené. Den se nezobrazí a objeví se hláška s formulářem, takže jde zvolit jiný den.
+- Velký čtvrtek až sobota (triduum) a Velikonoční vigilie: stránky nejsou napojené. Den se nezobrazí a objeví se hláška s formulářem, takže jde zvolit jiný den.
+- Všední dny od pondělí po Seslání Ducha svatého do soboty před Nejsvětější Trojicí a 26.–28. prosince (svatí o Vánocích).
 - Památky svatých: všední den se bere jako feriální, památka se nezohledňuje.
+- Pašije na Květnou neděli: evangelium se ručně doplní.
+- Některé dny mají formuláře nebo více variant, které parser nerozliší (např. 2. listopadu, vzpomínka na zemřelé). Chybějící část se označí jako „Pozor“.
 
 ## Kontrola a vlastní texty (web)
 - Nad textem je krabička s odkazem „Zkontrolovat texty“ (`bohosluzba.php?uprava=RRRR-MM-DD`).

@@ -106,8 +106,9 @@ function obdobiDne(DateTimeImmutable $d): string
 {
     $y = (int)$d->format('Y');
     $diff = dnuOd(velikonoce($y), $d);
-    if ($d >= adventZacatek($y)) { return 'advent'; }
+    // Vánoce (od 25. 12.) dřív než advent: advent končí 24. 12., i když je v prosinci
     if ($d->format('m-d') >= '12-25' || $d <= krtuPane($y)) { return 'vanoce'; }
+    if ($d >= adventZacatek($y)) { return 'advent'; }
     if ($diff >= -46 && $diff < 0) { return 'pust'; }
     if ($diff >= 0 && $diff <= 49) { return 'velikonoce'; }
     return 'mezidobi';
@@ -210,15 +211,6 @@ function popisDne(DateTimeImmutable $d, array $cfg): ?array
         [$nazev, $odk, $h] = $sl[$md];
         return den($nazev, $odk, $h, obdobiDne($d), $rok);
     }
-    // Všední den v mezidobí: stránka týdne NN_0D (D = 1 pondělí … 6 sobota); feriální cyklus I/II podle roku
-    if (obdobiDne($d) === 'mezidobi') {
-        $n = cisloTydneMezidobi($d->modify("-$w days"));
-        if ($n !== null) {
-            $dny = ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota'];
-            $nazev = $n === 1 ? "$dny[$w] 1. týdne v mezidobí" : "$dny[$w] po $n. neděli v mezidobí";
-            return den($nazev, odkaz('06mezidobi', sprintf('%02d_%02d.htm', $n, $w)), 'ferie', 'mezidobi', $y % 2 === 1 ? 'I' : 'II');
-        }
-    }
     // Slavnost připadla na neděli adventní/postní/velikonoční → přesunuta na pondělí
     if ($w === 1) {
         $pred = $d->modify('-1 day');
@@ -228,6 +220,68 @@ function popisDne(DateTimeImmutable $d, array $cfg): ?array
             [$nazev, $odk, $h] = $sl[$mdp];
             return den($nazev . ' (přeneseno)', $odk, $h, obdobiDne($d), $rok);
         }
+    }
+    // Všední den bez slavnosti: text ze stránky podle období
+    $f = feriePodleObdobi($d);
+    if ($f !== null) { return den($f['nazev'], $f['odkaz'], 'ferie', obdobiDne($d), $f['cyklus']); }
+    return null;
+}
+
+/**
+ * Všední den bez slavnosti: název, stránka na liturgie.cz a cyklus čtení ('I'/'II' v mezidobí, jinak '').
+ * Null tam, kde zatím nejsou stránky (triduum, Duchovní týden, svatí o Vánocích …).
+ */
+function feriePodleObdobi(DateTimeImmutable $d): ?array
+{
+    $y = (int)$d->format('Y');
+    $w = (int)$d->format('w');
+    $md = $d->format('m-d');
+    $dny = ['Neděle', 'Pondělí', 'Úterý', 'Středa', 'Čtvrtek', 'Pátek', 'Sobota'];
+    $den = $dny[$w];
+    $diff = dnuOd(velikonoce($y), $d);
+    $diffS = $diff - $w; // Neděle, ke které den patří (týdenní stránka je pojmenovaná podle ní)
+    $sbirka = fn(string $nazev, string $slozka, string $soubor, string $cyklus = '') => ['nazev' => $nazev, 'odkaz' => odkaz($slozka, $soubor), 'cyklus' => $cyklus];
+
+    switch (obdobiDne($d)) {
+        case 'mezidobi':
+            $n = cisloTydneMezidobi($d->modify("-$w days"));
+            if ($n === null) { return null; }
+            $nazev = $n === 1 ? "$den 1. týdne v mezidobí" : "$den po $n. neděli v mezidobí";
+            return $sbirka($nazev, '06mezidobi', sprintf('%02d_%02d.htm', $n, $w), $y % 2 === 1 ? 'I' : 'II');
+
+        case 'advent':
+            // 17.–24. 12. mají stránky podle data, dřívější dny podle týdne
+            if ($md >= '12-17' && $md <= '12-24') { return $sbirka((int)$d->format('j') . '. prosince', '01advent', sprintf('12_%02d.htm', (int)$d->format('j'))); }
+            $n = intdiv(dnuOd(adventZacatek($y), $d->modify("-$w days")), 7) + 1;
+            return $sbirka("$den po $n. neděli adventní", '01advent', sprintf('%02d_%02d.htm', $n, $w));
+
+        case 'vanoce':
+            // Oktáv Narození Páně: 26.–28. 12. jsou svatí (zatím ne), 29.–31. 12. a 2.–5. a 7.–12. 1. jsou všední dny
+            if (($md >= '12-29' && $md <= '12-31') || ($md >= '01-02' && $md <= '01-05') || ($md >= '01-07' && $md <= '01-12')) {
+                return $sbirka((int)$d->format('j') . ($d->format('m') === '12' ? '. prosince' : '. ledna'), '02vanoce', sprintf('%s_%02d.htm', $d->format('m'), (int)$d->format('j')));
+            }
+            return null;
+
+        case 'pust':
+            // Popeleční středa a týden po ní (stránky 00_03 až 00_06)
+            if ($diff >= -46 && $diff <= -43) {
+                $nazev = $w === 3 ? 'Popeleční středa' : "$den po Popeleční středě";
+                return $sbirka($nazev, '03pust', sprintf('00_%02d.htm', $w));
+            }
+            // Svatý týden: jen pondělí až středa; čtvrtek až sobota patří k triduu (zatím ne)
+            if ($diff >= -6 && $diff <= -1) {
+                return $w <= 3 ? $sbirka("$den Svatého týdne", '03pust', sprintf('06_%02d.htm', $w)) : null;
+            }
+            $n = intdiv($diffS + 49, 7); // 1. neděle postní = diffS −42
+            return $n >= 1 && $n <= 5 ? $sbirka("$den po $n. neděli postní", '03pust', sprintf('%02d_%02d.htm', $n, $w)) : null;
+
+        case 'velikonoce':
+            // Oktáv velikonoční: stránky 01_01 až 01_06
+            if ($diff >= 1 && $diff <= 6) { return $sbirka("$den v oktávu velikonočním", '05velikonoce', sprintf('01_%02d.htm', $w)); }
+            // Čtvrtek 6. týdne (39) je vždy Nanebevstoupení, jeho stránka 06_04 není všední den; Seslání týden (50–55) zatím ne
+            if ($diff === 39) { return null; }
+            $n = intdiv($diffS, 7) + 1;
+            return $n >= 2 && $n <= 7 ? $sbirka("$den po $n. neděli velikonoční", '05velikonoce', sprintf('%02d_%02d.htm', $n, $w)) : null;
     }
     return null;
 }
@@ -455,7 +509,8 @@ function typSekce(string $nazev): ?string
 
 function citaceZNadpisu(string $nazev): string
 {
-    return preg_match('~\s[–—-]\s(.+)$~u', $nazev, $m) ? trim($m[1]) : '';
+    // „Mezizpěv – Žl 1“, ale i „1. čtení- Iz 26,1“ (pomlčka bez mezery za slovem čtení)
+    return preg_match('~(?:\s[–—-]\s|čtení\s*[–—-]\s*)(.+)$~u', $nazev, $m) ? trim($m[1]) : '';
 }
 
 function jePasazCitace(string $t): bool
@@ -471,13 +526,15 @@ function vyberCteni(array $sekce, string $rok): array
         if (preg_match('~v roce ([ABC])\b~u', $s['nazev'], $m)) { $aktRok = $m[1]; continue; }
         // Všední dny: dva rozbalovací cykly (feriální I a II); verš a evangelium jsou společné
         if (preg_match('~^Roční cyklus ([12])$~u', $s['nazev'], $m)) { $aktRok = $m[1] === '1' ? 'I' : 'II'; continue; }
+        // Volitelné čtení „1. čtení v cyklu A“ (u adventních dnů) není hlavní; hlavní je první v pořadí
+        if (preg_match('~ v cyklu [ABC]$~u', $s['nazev'])) { continue; }
         $typ = typSekce($s['nazev']);
         if ($typ !== null) {
             if ($aktRok !== null && !(in_array($aktRok, ['I', 'II'], true) && in_array($typ, ['verš', 'evangelium'], true))) {
                 $podleRoku[$aktRok][$typ] = $s;
-            } else { $spolecne[$typ] = $s; }
-        } elseif ($s['uroven'] <= 4 && $s['uroven'] > 0 && $aktRok !== null) {
-            $aktRok = null; // konec bloku čtení (Vyznání víry, Modlitba nad dary ...)
+            } elseif (!isset($spolecne[$typ])) { $spolecne[$typ] = $s; }
+        } elseif ($s['uroven'] <= 4 && $s['uroven'] > 0 && $aktRok !== null && !preg_match('~^SEKVENCE$~iu', $s['nazev'])) {
+            $aktRok = null; // konec bloku čtení (Vyznání víry, Modlitba nad dary ...); sekvence k bloku patří
         }
     }
     // Slavnosti nemají nadpisy „v roce A/B/C“: bloky čtení jsou za sebou v pořadí A, B, C
@@ -516,6 +573,8 @@ function sekceTextu(array $sekce, string $regex): ?string
 function rozborCteni(array $s): array
 {
     $radky = $s['radky'];
+    // věta „Čte-li se toto čtení na …, může se dnes vzít:“ uvádí volitelné čtení; text za ní nepatří k tomuto čtení
+    foreach ($radky as $i => $r) { if (preg_match('~^Čte-li se~u', $r['t'])) { $radky = array_slice($radky, 0, $i); break; } }
     $citace = citaceZNadpisu($s['nazev']);
     if ($citace === '' && $radky && jePasazCitace($radky[0]['t'])) { $citace = array_shift($radky)['t']; }
     $uvod = '';
@@ -588,8 +647,11 @@ function nactiTexty(array $prilezitost, array $cfg): array
     if ($html === null) { return $vysl; }
 
     $sekce = rozdelNaSekce($html);
-    $vysl['vstupni'] = sekceTextu($sekce, '~^Vstupní modlitba~u');
-    $vysl['po_prijimani'] = sekceTextu($sekce, '~^Modlitba po přijímání~u');
+    // Vstupní modlitba je u některých dnů vánočního období ve dvou zněních (před / po slavnosti Zjevení Páně)
+    $datum = $prilezitost['datum'] ?? null;
+    $po = $datum instanceof DateTimeImmutable && $datum->format('m') === '01' && $datum->format('d') >= '07';
+    $vysl['vstupni'] = sekceTextu($sekce, '~^Vstupní modlitba~iu') ?? sekceTextu($sekce, $po ? '~^Po slavnosti Zjevení~iu' : '~^Před slavností Zjevení~iu');
+    $vysl['po_prijimani'] = sekceTextu($sekce, '~^Modlitba po přijímání~iu');
     $vyber = vyberCteni($sekce, $prilezitost['rok']);
     if ($vyber['cteni1']) { $vysl['cteni1'] = rozborCteni($vyber['cteni1']); }
     if ($vyber['cteni2']) { $vysl['cteni2'] = rozborCteni($vyber['cteni2']); }
@@ -768,7 +830,8 @@ function radkyZaver(): array
 /** Označení cyklu do výstupu: liturgický rok A/B/C u neděl a slavností, feriální cyklus I/II u všedních dnů. */
 function oznaceniRoku(array $p): string
 {
-    return in_array($p['rok'], ['I', 'II'], true) ? 'feriální cyklus ' . $p['rok'] : 'liturgický rok ' . $p['rok'];
+    if (in_array($p['rok'], ['I', 'II'], true)) { return 'feriální cyklus ' . $p['rok']; }
+    return $p['rok'] === '' ? 'všední den' : 'liturgický rok ' . $p['rok'];
 }
 
 function bohosluzbaHtml(array $p, array $t): string
