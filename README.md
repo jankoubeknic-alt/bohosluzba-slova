@@ -15,7 +15,7 @@ Najde příští neděle a slavnosti, stáhne k nim vlastní texty z liturgie.cz
 - V postní době vynechá Aleluja a zpívá jen verš.
 - Všední dny v mezidobí: text ze stránky týdne (`NN_0D.htm`). Cyklus čtení je I v lichých letech a II v sudých (kalendářní rok, podle indexu liturgie.cz). Stránka ukáže „feriální cyklus I/II“. Verš a evangelium jsou společné pro oba cykly.
 - Svátky a slavnosti ze sanktorálu (včetně 26.–28. prosince) se nabízejí ve všední den; seznam je v `svatky_ve_vsedni_den` v NASTAVENÍ. Neděli přebíjejí jen pevné slavnosti.
-- Památky svatých: povinné (`P`) se slaví vždy, kromě adventu od 17. 12., půstu a oktávů. Nepovinné (`NP`) se slaví jen s nastavením `'vzpominky' => 'vsechny'`. Pokud památka nemá vlastní stránku, použijí se feriální čtení a objeví se hláška „Pozor“.
+- Památky svatých: povinné (`P`) se slaví vždy, a chybějící části se doplní z feriálního dne, kromě adventu od 17. 12., půstu a oktávů. Nepovinné (`NP`) se slaví jen s nastavením `'vzpominky' => 'vsechny'`. Pokud památka nemá vlastní stránku, použijí se feriální čtení a objeví se hláška „Pozor“.
 - Velikonoční vigilie (Velká sobota večer): sedm čtení s žalmy a modlitbami, epištola, evangelium podle roku A/B/C. Každý žalm má odkaz na Korejs.
 - Velikonoce a doba kolem: vigilie, Květná neděle s pašijemi (evangelium podle roku A/B/C), Zelený čtvrtek (Glorie, bez Vyznání) a Velký pátek (pašije podle Jana, bez Glorie a Vyznání), Svatý týden po pondělí až středu, oktáv, týdny velikonoční a týden po Letnicích (týdny 8 a 9 mezidobí).
 - Všední dny v adventu (do 16. 12. podle týdne, 17.–24. 12. podle data), o vánocích (29.–31. 12., 2.–5. 1., 7.–12. 1.), v postě (Popeleční středa, týdny, Svatý týden po pondělí až středu) a o velikonocích (oktáv, týdny). Mají jedno čtení bez cyklu. Volitelné varianty (např. „1. čtení v cyklu A“) se nebere, použije se hlavní čtení.
@@ -24,10 +24,9 @@ Najde příští neděle a slavnosti, stáhne k nim vlastní texty z liturgie.cz
 - U bohoslužby uvede zdroj (adresu stránky na liturgie.cz) v krabičce nad textem; u Květné neděle i odkaz na pašije.
 
 ## Zatím chybí
-- Některé památky a dny jen s odkazem na společné texty (např. sv. Marta, sv. Pio): parser je zatím nepřečte. Hláška „Pozor“ říká, které části doplnit z misálu.
-- Vzpomínka na zemřelé (2. listopadu) má tři mešní formuláře s různými čteními a evangelii; čtení se nevybírají automaticky, zůstanou prázdná místa.
-- Některé žalmy se berou jen z jedné varianty (např. sv. Terezie Benedikty); hláška „chybí žalm“ je označí.
-- Obřad světla a křestní část vigilie nejsou v bohoslužbě slova; úvod vigilie doplňte z misálu.
+- Velikonoční vigilie: obřad světla a křestní část nejsou v bohoslužbě slova; úvod vigilie doplňte z misálu.
+- Památky a vzpomínky, které na liturgie.cz odkazují na společné texty nebo mají více formulářů (např. 2. listopadu, sv. Marta, sv. Pio): chybějící části se doplní z feriálního dne téhož data a v bohoslužbě je to uvedeno. Vlastní texty zadáte v kontrole.
+- Některé žalmy jsou v misálu jen jako alternativa a parser je neobere; doplní se z feriálního dne nebo zadají ručně.
 
 ## Kontrola a vlastní texty (web)
 - Nad textem je krabička s odkazem „Zkontrolovat texty“ (`bohosluzba.php?uprava=RRRR-MM-DD`).

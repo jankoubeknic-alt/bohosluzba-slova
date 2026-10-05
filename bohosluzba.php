@@ -1003,6 +1003,29 @@ function nactiTexty(array $prilezitost, array $cfg): array
     foreach ($kontrola as $k => $popis) {
         if (empty($vysl[$k])) { $vysl['chyby'][] = "chybí: $popis" . ($spolecneTexty ? ' (stránka odkazuje na společné texty, doplňte z misálu)' : ''); }
     }
+    return doplnZeDne($vysl, $prilezitost, $cfg);
+}
+
+/**
+ * Památka nebo vzpomínka bez vlastního textu: chybějící části se doplní z feriálního dne téhož data.
+ * Misál pro bohoslužbu slova doporučuje „čtení ze dne“, společné texty jsou jen možnost; doplněné části se uvedou jako informace.
+ */
+function doplnZeDne(array $vysl, array $prilezitost, array $cfg): array
+{
+    $chybi = array_filter($vysl['chyby'] ?? [], fn($c) => str_starts_with($c, 'chybí:'));
+    if (!$chybi || !in_array($prilezitost['hodnost'] ?? '', ['pamatka', 'zesnuli', 'svatek'], true) || !($prilezitost['datum'] ?? null)) { return $vysl; }
+    $den = feriePodleObdobi($prilezitost['datum']);
+    if ($den === null) { return $vysl; }
+    $fer = nactiTexty(['odkaz' => $den['odkaz'], 'rok' => $den['cyklus'], 'datum' => $prilezitost['datum'], 'hodnost' => 'ferie', 'nazev' => $den['nazev']], $cfg);
+    $popisy = ['vstupni' => 'vstupní modlitba', 'po_prijimani' => 'modlitba po přijímání', 'cteni1' => '1. čtení', 'zalm' => 'žalm', 'verš' => 'verš před evangeliem', 'evangelium' => 'evangelium'];
+    $doplneno = [];
+    foreach ($popisy as $k => $popis) {
+        if (!empty($vysl[$k]) || empty($fer[$k])) { continue; }
+        $vysl[$k] = $fer[$k];
+        $doplneno[] = $popis;
+        $vysl['chyby'] = array_values(array_filter($vysl['chyby'], fn($c) => !str_starts_with($c, "chybí: $popis")));
+    }
+    $vysl['doplneno'] = $doplneno;
     return $vysl;
 }
 
@@ -1215,7 +1238,10 @@ function bohosluzbaHtml(array $p, array $t): string
         $hlava .= '<p class="chyba"><b>Pozor:</b> ' . h(implode('; ', $t['chyby'])) . '. Doplňte ručně nebo zkontrolujte stránku na liturgie.cz.</p>';
     }
     if ($p['hodnost'] === 'zesnuli') {
-        $hlava .= '<p class="chyba"><b>Pozor:</b> vzpomínka na zemřelé má tři mešní formuláře s různými čteními a evangelii. Vyberte formulář v misálu a čtení doplňte ručně (zde jsou prázdná místa).</p>';
+        $hlava .= '<p class="chyba"><b>Pozor:</b> vzpomínka na zemřelé má tři mešní formuláře s různými čteními a evangelii. Čtení jsou z feriálního dne; formulář vyberte v misálu, nebo vlastní texty zadejte v kontrole.</p>';
+    }
+    if (!empty($t['doplneno'])) {
+        $hlava .= '<p class="zdroj"><b>Doplněno z feriálního dne:</b> ' . h(implode(', ', $t['doplneno'])) . '. Misál pro bohoslužbu slova doporučuje čtení ze dne; vlastní texty zadejte v kontrole.</p>';
     }
     if (!empty($p['pamatka_bez_stranky'])) {
         $hlava .= '<p class="chyba"><b>Pozor:</b> památka ' . h($p['nazev']) . ' nemá na liturgie.cz vlastní stránku. Vstupní modlitba, orace a čtení jsou feriální; vlastní texty doplňte z misálu.</p>';
