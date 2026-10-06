@@ -785,10 +785,16 @@ function typSekce(string $nazev): ?string
     };
 }
 
+/** Odstraní z citace poznámku z webu „(naznačené ze společných textů)“; citace zůstane jen s biblickým odkazem. */
+function ocistiCitaci(string $citace): string
+{
+    return trim(preg_replace('~\s*\(naznačen[^)]*\)~u', '', $citace));
+}
+
 function citaceZNadpisu(string $nazev): string
 {
     // „Mezizpěv – Žl 1“, ale i „1. čtení- Iz 26,1“ (pomlčka bez mezery za slovem čtení)
-    return preg_match('~(?:\s[–—-]\s|čtení\s*[–—-]\s*)(.+)$~u', $nazev, $m) ? trim($m[1]) : '';
+    return preg_match('~(?:\s[–—-]\s|čtení\s*[–—-]\s*)(.+)$~u', $nazev, $m) ? ocistiCitaci(trim($m[1])) : '';
 }
 
 function jePasazCitace(string $t): bool
@@ -880,7 +886,7 @@ function rozborCteni(array $s): array
         $odstavce[$r['odst']][] = $r['t'];
     }
     $text = implode("\n\n", array_map(fn($o) => implode(' ', $o), $odstavce));
-    return ['citace' => $citace, 'uvod' => $uvod, 'text' => trim($text)];
+    return ['citace' => ocistiCitaci($citace), 'uvod' => $uvod, 'text' => trim($text)];
 }
 
 function rozborZalmu(array $s): array
@@ -896,7 +902,7 @@ function rozborZalmu(array $s): array
     }
     $sloky = [];
     foreach ($radky as $r) { $sloky[$r['odst']][] = $r['t']; }
-    return ['citace' => $citace, 'refren' => $refren, 'sloky' => array_values(array_map(fn($o) => implode("\n", $o), $sloky))];
+    return ['citace' => ocistiCitaci($citace), 'refren' => $refren, 'sloky' => array_values(array_map(fn($o) => implode("\n", $o), $sloky))];
 }
 
 function rozborVerse(array $s): array
@@ -906,7 +912,7 @@ function rozborVerse(array $s): array
     if ($radky && jePasazCitace($radky[0]['t'])) { $c = array_shift($radky)['t']; $citace = $citace ?: $c; }
     $text = trim(implode(' ', array_map(fn($r) => $r['t'], $radky)));
     $bezAleluja = trim(preg_replace(['~^\s*Aleluja[.,!]?\s*~u', '~\s*Aleluja[.,!]?\s*$~u'], '', $text));
-    return ['citace' => $citace, 'text' => $text, 'bez_aleluja' => $bezAleluja];
+    return ['citace' => ocistiCitaci($citace), 'text' => $text, 'bez_aleluja' => $bezAleluja];
 }
 
 /** Sekce jednoho mešního formuláře (vzpomínka na zemřelé): od „N. mešní formulář“ do dalšího formuláře nebo „Preface“. */
@@ -1104,9 +1110,7 @@ function radkySlova(array $p, array $t): array
     };
     $cteni('cteni1', '1.', 'Čtení z ...');
 
-    $cislo = $t['zalm_cislo'] ?? '';
-    $zpev = $t['zalm']['citace'] ?? '';
-    $r[] = ['pokyn', 'Žalm. Zpívá Honza nebo varhanice Lenka. Lid sedí. ' . ($cislo !== '' ? "($cislo) – text a nápěv v Korejsovi." : ($zpev !== '' ? "($zpev) – doplňte z misálu." : '(doplňte z misálu.)'))];
+    $r = array_merge($r, radkyZalmu($t['zalm'] ?? null, $t['zalm']['citace'] ?? ''));
 
     if (!empty($t['cteni2'])) { $cteni('cteni2', '2.', 'Čtení z ...'); }
 
@@ -1128,6 +1132,23 @@ function radkySlova(array $p, array $t): array
         $r[] = ['P', 'Povstaňme a vyznejme svou víru.'];
         $r[] = ['Vš', KREDO];
     }
+    return $r;
+}
+
+/**
+ * Žalm nebo kantikum. Žalm s číslem jde na Korejs (text a nápěv se nevypisují). Kantikum (např. Magnifikat)
+ * Korejs nemá, proto se jeho refrén a sloky vypíšou přímo.
+ */
+function radkyZalmu(?array $zalm, string $citace): array
+{
+    $cislo = zalmCislo($citace);
+    if ($cislo !== '') {
+        return [['pokyn', 'Žalm. Zpívá Honza nebo varhanice Lenka. Lid sedí. (' . $cislo . ') – text a nápěv v Korejsovi.']];
+    }
+    $r = [['pokyn', 'Kantikum' . ($citace !== '' ? " ($citace)" : '') . '. Zpívá Honza nebo varhanice Lenka. Lid sedí.']];
+    if (trim((string)($zalm['refren'] ?? '')) !== '') { $r[] = ['Vš', $zalm['refren']]; }
+    foreach ($zalm['sloky'] ?? [] as $sloka) { $r[] = ['Ž', $sloka]; }
+    if (count($r) === 1) { $r[] = ['pokyn', '(text doplňte z misálu)']; }
     return $r;
 }
 
@@ -1159,10 +1180,7 @@ function radkyVigilie(array $t): array
         $r[] = ['L', vlastni($c['text'] ?? null, 'VLASTNÍ TEXT - ' . ($i < 7 ? "$vedle ČTENÍ" : 'EPIŠTOLA') . '.')];
         $r[] = ['L', 'Slyšeli jsme slovo Boží.'];
         $r[] = ['Vš', 'Bohu díky.'];
-        if (!empty($c['zalm'])) {
-            $cislo = zalmCislo($c['zalm']['citace'] ?? '');
-            $r[] = ['pokyn', 'Žalm. Zpívá Honza nebo varhanice Lenka. Lid sedí. ' . ($cislo !== '' ? "($cislo) – text a nápěv v Korejsovi." : '(doplňte z misálu.)')];
-        }
+        if (!empty($c['zalm'])) { $r = array_merge($r, radkyZalmu($c['zalm'], $c['zalm']['citace'] ?? '')); }
         if (!empty($c['modlitba'])) { $r[] = ['P', vlastni($c['modlitba'], 'VLASTNÍ MODLITBA.')]; }
     }
     $r[] = ['pokyn', 'Zpěv Aleluja. Stojí všichni. Aleluja se zpívá třikrát, zpěvák začíná, ostatní opakují. Verš v misálu není, zpívá se jen Aleluja.'];
@@ -2024,6 +2042,12 @@ jeRovno('ferie: stránka bez vyznání víry', str_contains($hf, 'Věřím v jed
 jeRovno('ferie: stránka bez Gloria', str_contains($hf, 'Sláva na výsostech'), false);
 jeRovno('ferie: stránka s feriálním cyklem', str_contains($hf, 'feriální cyklus II'), true);
     smazSlozku($tmp);
+    // Poznámka z webu se nedostane do citace; kantikum bez čísla vypíše text, žalm s číslem jde na Korejs
+    jeRovno('citace bez poznámky z webu', ocistiCitaci('Sk 1,12-14 (naznačené ze společných textů)'), 'Sk 1,12-14');
+    jeRovno('citace žalmu bez poznámky', ocistiCitaci('Lk 1,46-48a.48b-49 (naznačený ze společných textů)'), 'Lk 1,46-48a.48b-49');
+    jeRovno('kantikum vypíše refrén a sloky', radkyZalmu(['citace' => 'Lk 1,46-55', 'refren' => 'Refrén.', 'sloky' => ['Sloka jedna.']], 'Lk 1,46-55'),
+        [['pokyn', 'Kantikum (Lk 1,46-55). Zpívá Honza nebo varhanice Lenka. Lid sedí.'], ['Vš', 'Refrén.'], ['Ž', 'Sloka jedna.']]);
+    jeRovno('žalm s číslem jde na Korejs', radkyZalmu(['refren' => 'R', 'sloky' => []], 'Žl 80 (79), 9+12'), [['pokyn', 'Žalm. Zpívá Honza nebo varhanice Lenka. Lid sedí. (Žl 80 (79)) – text a nápěv v Korejsovi.']]);
     echo "Hotovo: $ok v pořádku, $chyb chyb.\n";
     return $chyb ? 1 : 0;
 }
