@@ -34,7 +34,7 @@ $CFG = [
     // Památky svatých ve všední den: 'povinne' = jen povinné (mají texty na liturgie.cz), 'vsechny' i nepovinné (jen pokud mají stránku)
     'vzpominky' => 'povinne',
     'zesnuli_formular' => 1,                 // vzpomínka na zemřelé (2. 11.) má 3 mešní formuláře: 1, 2 nebo 3 (vstupní a po přijímání)
-    'vcetne_dnes' => false,                  // false = hledat od zítřka, true = od dneška
+    'vcetne_dnes' => false,                  // výchozí den bez data: false = následující neděle (po dnešku), true = dnešní neděle, je-li dnes neděle
     'casove_pasmo' => 'Europe/Prague',
 ];
 // =========================================================
@@ -560,6 +560,12 @@ function feriePodleObdobi(DateTimeImmutable $d): ?array
             return $n >= 2 && $n <= 7 ? $sbirka("$den po $n. neděli velikonoční", '05velikonoce', sprintf('%02d_%02d.htm', $n, $w)) : null;
     }
     return null;
+}
+
+/** Výchozí den bohoslužby: následující neděle po $dnes (nebo dnešní, je-li $vcetneDnes a dnes je neděle). */
+function nasledujiciNedele(DateTimeImmutable $dnes, bool $vcetneDnes): DateTimeImmutable
+{
+    return $dnes->modify($vcetneDnes ? 'this sunday' : 'next sunday');
 }
 
 /** Dalších $pocet příležitostí počínaje datem $od (včetně). */
@@ -1556,9 +1562,8 @@ function bsHlavni(array $CFG): void
         if ($platne($arg['den'] ?? null)) {
             $den = new DateTimeImmutable($arg['den']);
         } else {
-            // Bez data: nejbližší den, který má bohoslužbu slova, od zítřka (od dneška podle nastavení)
-            $od = new DateTimeImmutable($cfg['vcetne_dnes'] ? 'today' : 'tomorrow');
-            $den = dalsiPrilezitosti($od, 1, $cfg)[0]['datum'];
+            // Bez data: následující neděle (dnešní, pokud je dnes neděle a 'vcetne_dnes')
+            $den = nasledujiciNedele(new DateTimeImmutable('today'), $cfg['vcetne_dnes']);
         }
         $p = popisDne($den, $cfg + ['_vsedni' => ['nanebevstoupeni', 'bozi_telo']]);
         if ($p === null) { throw new RuntimeException('Tento den není nedělí ani nastavenou slavností.'); }
@@ -2042,6 +2047,11 @@ jeRovno('ferie: stránka bez vyznání víry', str_contains($hf, 'Věřím v jed
 jeRovno('ferie: stránka bez Gloria', str_contains($hf, 'Sláva na výsostech'), false);
 jeRovno('ferie: stránka s feriálním cyklem', str_contains($hf, 'feriální cyklus II'), true);
     smazSlozku($tmp);
+    // Výchozí den bez data: následující neděle
+    jeRovno('výchozí den: úterý → neděle', nasledujiciNedele($d('2026-10-06'), false)->format('Y-m-d'), '2026-10-11');
+    jeRovno('výchozí den: neděle bez dnešku → za týden', nasledujiciNedele($d('2026-10-04'), false)->format('Y-m-d'), '2026-10-11');
+    jeRovno('výchozí den: neděle s dneškem → dnes', nasledujiciNedele($d('2026-10-04'), true)->format('Y-m-d'), '2026-10-04');
+    jeRovno('výchozí den: pondělí s dneškem → neděle', nasledujiciNedele($d('2026-10-05'), true)->format('Y-m-d'), '2026-10-11');
     // Poznámka z webu se nedostane do citace; kantikum bez čísla vypíše text, žalm s číslem jde na Korejs
     jeRovno('citace bez poznámky z webu', ocistiCitaci('Sk 1,12-14 (naznačené ze společných textů)'), 'Sk 1,12-14');
     jeRovno('citace žalmu bez poznámky', ocistiCitaci('Lk 1,46-48a.48b-49 (naznačený ze společných textů)'), 'Lk 1,46-48a.48b-49');

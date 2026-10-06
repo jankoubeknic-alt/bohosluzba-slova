@@ -56,8 +56,8 @@ Celý generátor je **jediný soubor `bohosluzba.php`** včetně vestavěných t
 - `slavnosti_ve_vsedni_den` – nabízet slavnosti a svátky ve všední den.
 - `svatky_ve_vsedni_den` – seznam měsíc-den slavností a svátků, které se nabízejí ve všední den. Co nechcete, smažte.
 - `vzpominky` – `'povinne'` (výchozí) nebo `'vsechny'` (i nepovinné památky).
+- `vcetne_dnes` – výchozí den bez data je následující neděle; `true` počítá i s dnešní nedělí, je-li dnes neděle.
 - `zesnuli_formular` – 1, 2 nebo 3 pro vzpomínku na zemřelé.
-- `vcetne_dnes` – hledat od dneška, nebo od zítřka.
 
 ## Upozornění
 - Texty jsou © ČBK / Liturgie.cz; web je určen k přípravě. Generátor stahuje každou stránku jednou a ukládá ji do `cache/` (90 dní). Používejte pro vlastní přípravu, nezveřejňujte.
