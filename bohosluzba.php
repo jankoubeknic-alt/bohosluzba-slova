@@ -1028,10 +1028,12 @@ function prvniNabidkaCteni(array $sekce): ?array
 {
     foreach ($sekce as $i => $s) {
         if (typSekce($s['nazev']) !== 'cteni1' || $s['radky']) { continue; }
-        for ($j = $i + 1; $j < count($sekce) && $j <= $i + 4; $j++) {
-            if ($sekce[$j]['radky'] && typSekce($sekce[$j]['nazev']) === null) {
-                return ['nazev' => '1. čtení – ' . $sekce[$j]['nazev'], 'uroven' => $sekce[$j]['uroven'], 'radky' => $sekce[$j]['radky']];
-            }
+        // jen bezprostředně následující sekce (jinak prázdné „1. čtení“ u památky bez vlastních textů,
+        // kde chybí i žalm/verš/evangelium, zabředne o pár nadpisů dál do „Modlitba nad dary“)
+        $j = $i + 1;
+        if (isset($sekce[$j]) && $sekce[$j]['radky'] && typSekce($sekce[$j]['nazev']) === null
+            && !preg_match('~^(Modlitba|Preface|Eucharistická modlitba|Antifona|Vyznání víry|Přímluvy)~iu', $sekce[$j]['nazev'])) {
+            return ['nazev' => '1. čtení – ' . $sekce[$j]['nazev'], 'uroven' => $sekce[$j]['uroven'], 'radky' => $sekce[$j]['radky']];
         }
     }
     return null;
@@ -2041,6 +2043,13 @@ jeRovno('svatí: žalm refrén (kurzíva)', $ts['zalm']['refren'], 'Toto je poko
 $snip = rozdelNaSekce('<html><body><h3>x</h3><p><button>Čtení z Písma v roce B</button></p><h4>1. čtení</h4><p>Text.</p><p><a href="i.html">zpět</a></p></body></html>');
 jeRovno('tlačítko je nadpis', $snip[2]['nazev'], 'Čtení z Písma v roce B');
 jeRovno('zpět mimo text', array_map(fn($r) => $r['t'], $snip[3]['radky']), ['Text.']);
+// Prázdné „1. čtení“ nabídne jen bezprostředně následující sekci (skutečné „X nebo Y“); vzdálenou
+// „Modlitba nad dary“ u památky bez vlastních čtení (jen „naznačené“ žalm/verš/evangelium mezi nimi) nebere
+$sNabidka = ['1. čtení' => 'cteni1', 'Mezizpěv' => 'zalm', 'Zpěv před evangeliem' => 'verš', 'Evangelium' => 'evangelium', 'Modlitba nad dary' => null];
+$sekPrazdne = array_map(fn($nazev, $typ) => ['nazev' => $nazev, 'uroven' => 4, 'radky' => $typ === null ? [['t' => 'Text darů.', 'kurziva' => false, 'poznamka' => false, 'odst' => 0]] : []], array_keys($sNabidka), $sNabidka);
+jeRovno('prvniNabidkaCteni: vzdálenou sekci nebere', prvniNabidkaCteni($sekPrazdne), null);
+$sekSousedni = [['nazev' => '1. čtení', 'uroven' => 4, 'radky' => []], ['nazev' => 'Pís 3,1-4a', 'uroven' => 4, 'radky' => [['t' => 'Text nabídky.', 'kurziva' => false, 'poznamka' => false, 'odst' => 0]]]];
+jeRovno('prvniNabidkaCteni: sousední sekci bere', prvniNabidkaCteni($sekSousedni)['nazev'] ?? null, '1. čtení – Pís 3,1-4a');
 // Vlastní texty (kontrola): přepíší automatický text v paměti, ostatní části zůstanou; nic se neukládá
 $pu = popisDne($d('2026-10-11'), $cfg); $pu['datum'] = $d('2026-10-11');
 $tu = uplatniUpravy(nactiTexty($pu, $cfg), ['verš' => 'Vlastní verš.', 'cteni1' => 'Vlastní čtení.']);
