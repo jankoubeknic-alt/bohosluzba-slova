@@ -732,25 +732,31 @@ function rozdelNaSekce(string $html): array
     $telo = $dom->getElementsByTagName('body')->item(0) ?? $dom->documentElement;
     $bloky = ['p', 'div', 'li', 'blockquote', 'td', 'tr', 'ul', 'ol', 'table', 'pre', 'center'];
     $sekce = [['uroven' => 0, 'nazev' => '', 'radky' => []]];
-    $radek = ''; $kurz = 0; $celkem = 0; $odst = 0;
-    $flush = function () use (&$sekce, &$radek, &$kurz, &$celkem, &$odst) {
+    $radek = ''; $kurz = 0; $pozn = 0; $celkem = 0; $odst = 0;
+    // misál sází červeně pokyny a odpovědi lidu, třídou „m“ pak editorské/metodické poznámky (odkazy na
+    // dokumenty, vysvětlivky k obřadu) – obojí je jen doprovodný text, nikdy text k přečtení
+    $flush = function () use (&$sekce, &$radek, &$kurz, &$pozn, &$celkem, &$odst) {
         $t = trim(preg_replace('~[ \t\x{00A0}]+~u', ' ', $radek));
         if ($t !== '') {
-            $sekce[count($sekce) - 1]['radky'][] = ['t' => $t, 'kurziva' => $celkem > 0 && $kurz / $celkem > 0.6, 'odst' => $odst];
+            $sekce[count($sekce) - 1]['radky'][] = ['t' => $t, 'kurziva' => $celkem > 0 && $kurz / $celkem > 0.6, 'poznamka' => $celkem > 0 && $pozn / $celkem > 0.6, 'odst' => $odst];
         }
-        $radek = ''; $kurz = 0; $celkem = 0;
+        $radek = ''; $kurz = 0; $pozn = 0; $celkem = 0;
     };
-    $walk = function (DOMNode $n, bool $kurziva) use (&$walk, &$sekce, &$radek, &$kurz, &$celkem, &$odst, $flush, $bloky) {
+    $walk = function (DOMNode $n, bool $kurziva, bool $poznamka) use (&$walk, &$sekce, &$radek, &$kurz, &$pozn, &$celkem, &$odst, $flush, $bloky) {
         foreach ($n->childNodes as $c) {
             if ($c instanceof DOMText) {
                 $t = preg_replace('~\s+~u', ' ', $c->textContent);
-                if (trim($t) !== '') { $radek .= $t; $celkem += delka(trim($t)); if ($kurziva) { $kurz += delka(trim($t)); } }
-                else { $radek .= ' '; }
+                if (trim($t) !== '') {
+                    $d = delka(trim($t)); $radek .= $t; $celkem += $d;
+                    if ($kurziva) { $kurz += $d; }
+                    if ($poznamka) { $pozn += $d; }
+                } else { $radek .= ' '; }
             } elseif ($c instanceof DOMElement) {
                 $tag = strtolower($c->tagName);
                 if (in_array($tag, ['script', 'style', 'head'], true)) { continue; }
                 // odkaz „zpět“ na konci stránky nepatří do textu
                 if ($tag === 'a' && preg_match('~^zpět~iu', trim($c->textContent))) { continue; }
+                $vlastniPoznamka = (bool)preg_match('~\b(red|m)\b~iu', $c->getAttribute('class'));
                 if (preg_match('~^h([1-4])$~', $tag, $m)) {
                     $flush();
                     $sekce[] = ['uroven' => (int)$m[1], 'nazev' => trim(preg_replace('~\s+~u', ' ', $c->textContent)), 'radky' => []];
@@ -763,16 +769,18 @@ function rozdelNaSekce(string $html): array
                 } elseif ($tag === 'br') {
                     $flush();
                 } elseif (in_array($tag, $bloky, true)) {
+                    // nový blok (p/div/td/...) nedědí „červenost“ předka – jinak by chybějící „>“ v jednom
+                    // řádku (chyba na webu) mohlo stáhnout poznámku na celý zbytek stránky
                     $flush(); $odst++;
-                    $walk($c, $kurziva);
+                    $walk($c, $kurziva, $vlastniPoznamka);
                     $flush(); $odst++;
                 } else {
-                    $walk($c, $kurziva || in_array($tag, ['i', 'em'], true));
+                    $walk($c, $kurziva || in_array($tag, ['i', 'em'], true), $poznamka || $vlastniPoznamka);
                 }
             }
         }
     };
-    $walk($telo, false);
+    $walk($telo, false, false);
     $flush();
     return $sekce;
 }
@@ -795,6 +803,31 @@ function typSekce(string $nazev): ?string
 function ocistiCitaci(string $citace): string
 {
     return trim(preg_replace('~\s*\(naznačen[^)]*\)~u', '', $citace));
+}
+
+/**
+ * Liturgie.cz u modliteb zkracuje obvyklé zakončení na tři tečky (např. „Skrze tvého Syna …“),
+ * protože se předpokládá, že ho celebrant zná zpaměti. Doplní se celé znění (ověřeno i mimo liturgie.cz,
+ * např. breviar.op.cz), aby ho čtenář nemusel dohledávat.
+ */
+function doplnZakonceniModlitby(string $t): string
+{
+    $t = rtrim($t);
+    // „Skrze tvého Syna …“ bývá i uprostřed věty („Prosíme o to skrze tvého Syna …“) s malým s
+    if (preg_match('~([Ss])krze tvého Syna\s*(?:\.\.\.+|…)\s*$~u', $t, $m)) {
+        $pokracovani = ($m[1] === 'S' ? 'Skrze' : 'skrze') . ' tvého Syna Ježíše Krista, našeho Pána, neboť on s tebou v jednotě Ducha svatého žije a kraluje po všechny věky věků.';
+        return preg_replace('~[Ss]krze tvého Syna\s*(?:\.\.\.+|…)\s*$~u', $pokracovani, $t);
+    }
+    $konce = [
+        '~Neboť on s tebou v jednotě Ducha [Ss]vatého\s*(?:\.\.\.+|…)\s*$~u' => 'Neboť on s tebou v jednotě Ducha svatého žije a kraluje po všechny věky věků.',
+        '~Neboť on s tebou v jednotě\s*(?:\.\.\.+|…)\s*$~u' => 'Neboť on s tebou v jednotě Ducha svatého žije a kraluje po všechny věky věků.',
+        '~Neboť ty žiješ a kraluješ s Bohem Otcem v jednotě\s*(?:\.\.\.+|…)\s*$~u' => 'Neboť ty žiješ a kraluješ s Bohem Otcem v jednotě Ducha svatého po všechny věky věků.',
+        '~Neboť ty žiješ a kraluješ s Bohem Otcem\s*(?:\.\.\.+|…)\s*$~u' => 'Neboť ty žiješ a kraluješ s Bohem Otcem v jednotě Ducha svatého po všechny věky věků.',
+    ];
+    foreach ($konce as $vzor => $plne) {
+        if (preg_match($vzor, $t)) { return preg_replace($vzor, $plne, $t); }
+    }
+    return $t;
 }
 
 function citaceZNadpisu(string $nazev): string
@@ -854,15 +887,40 @@ function vyberCteni(array $sekce, string $rok): array
     return $vysl;
 }
 
+/**
+ * Řádek je pokyn, editorská poznámka nebo odpověď lidu, ne text k přečtení: celý je červený nebo má
+ * třídu „m“ (liturgická typografie pokynů/poznámek a odpovědí), je to jen odpověď „O: Amen.“, nebo
+ * uvádí alternativu („Nebo:“ – jen slovo „Nebo“ je červené, zbytek řádku ne).
+ */
+function jePokynRadku(array $r): bool
+{
+    return !empty($r['poznamka'])
+        || (bool)preg_match('~^[OVP]\s*[:.]\s*Amen\.?\s*$~iu', $r['t'])
+        || (bool)preg_match('~^Nebo\s*:~u', $r['t']);
+}
+
+/**
+ * Spojí řádky sekce do jednoho textu modlitby. Pokyn před textem („Neříká se Modleme se“) se přeskočí;
+ * na pokynu/odpovědi za textem („O: Amen“, „Nebo:“ s další variantou modlitby) se vezme jen to, co je
+ * před ním – jedna stránka má často dvě modlitby na výběr a my chceme jen tu první.
+ */
+function textModlitby(array $radky): string
+{
+    $t = [];
+    foreach ($radky as $r) {
+        if (jePokynRadku($r)) { if ($t) { break; } continue; }
+        $t[] = $r['t'];
+    }
+    // pojistka, kdyby se odpověď lidu objevila jako holé „Amen.“ bez O:/V: a bez červené
+    return trim(preg_replace('~\s*Amen\.?\s*$~u', '', trim(implode(' ', $t))));
+}
+
 /** Text první sekce, jejíž nadpis sedí na regex a která má text (prázdné nadpisy se přeskočí). */
 function sekceTextu(array $sekce, string $regex): ?string
 {
     foreach ($sekce as $s) {
         if (preg_match($regex, $s['nazev'])) {
-            $t = [];
-            foreach ($s['radky'] as $r) { $t[] = $r['t']; }
-            $txt = trim(implode(' ', $t));
-            $txt = preg_replace('~\s*Amen\.?\s*$~u', '', $txt);
+            $txt = textModlitby($s['radky']);
             if ($txt !== '') { return $txt; }
         }
     }
@@ -888,6 +946,8 @@ function rozborCteni(array $s): array
     }
     $odstavce = [];
     foreach ($radky as $r) {
+        // pokyn nebo nabídka jiného čtení (volitelná varianta ročního cyklu) za textem už k němu nepatří
+        if (jePokynRadku($r)) { if ($odstavce) { break; } continue; }
         if (preg_match('~^(Slovo Boží|Slovo Páně|Evangelium Páně|Zde je slovo|Slyšeli jsme)~u', $r['t'])) { continue; }
         $odstavce[$r['odst']][] = $r['t'];
     }
@@ -907,7 +967,11 @@ function rozborZalmu(array $s): array
         if ($i > 2) { break; }
     }
     $sloky = [];
-    foreach ($radky as $r) { $sloky[$r['odst']][] = $r['t']; }
+    foreach ($radky as $r) {
+        // pokyn nebo nabídka jiného zpěvu („Nebo: Aleluja.“) za textem už k žalmu nepatří
+        if (jePokynRadku($r)) { if ($sloky) { break; } continue; }
+        $sloky[$r['odst']][] = $r['t'];
+    }
     return ['citace' => ocistiCitaci($citace), 'refren' => $refren, 'sloky' => array_values(array_map(fn($o) => implode("\n", $o), $sloky))];
 }
 
@@ -916,7 +980,7 @@ function rozborVerse(array $s): array
     $citace = citaceZNadpisu($s['nazev']);
     $radky = $s['radky'];
     if ($radky && jePasazCitace($radky[0]['t'])) { $c = array_shift($radky)['t']; $citace = $citace ?: $c; }
-    $text = trim(implode(' ', array_map(fn($r) => $r['t'], $radky)));
+    $text = textModlitby($radky);
     $bezAleluja = trim(preg_replace(['~^\s*Aleluja[.,!]?\s*~u', '~\s*Aleluja[.,!]?\s*$~u'], '', $text));
     return ['citace' => ocistiCitaci($citace), 'text' => $text, 'bez_aleluja' => $bezAleluja];
 }
@@ -948,7 +1012,7 @@ function ctenyVigilie(array $sekce): array
         } elseif (preg_match('~^Mezizpěv~iu', $nazev) && $posledni !== null && $vysl[$posledni]['zalm'] === null) {
             $vysl[$posledni]['zalm'] = rozborZalmu($s);
         } elseif ($nazev === 'Modlitba' && $posledni !== null && $vysl[$posledni]['modlitba'] === null && $s['radky']) {
-            $vysl[$posledni]['modlitba'] = implode(' ', array_map(fn($r) => $r['t'], $s['radky']));
+            $vysl[$posledni]['modlitba'] = doplnZakonceniModlitby(textModlitby($s['radky']));
         } elseif (preg_match('~^Evangelium~iu', $nazev)) {
             break;
         }
@@ -1003,8 +1067,6 @@ function nactiTexty(array $prilezitost, array $cfg): array
     $po = $datum instanceof DateTimeImmutable && $datum->format('m') === '01' && $datum->format('d') >= '07';
     $vysl['vstupni'] = sekceTextu($sekce, '~^Vstupní modlitba~iu') ?? sekceTextu($sekce, $po ? '~^Po slavnosti Zjevení~iu' : '~^Před slavností Zjevení~iu')
         ?? sekceTextu($sekce, '~^Modlitba$~u'); // Velký pátek: úvodní modlitba se jmenuje jen „Modlitba“
-    // pokyn před textem modlitby („(Neříká se Modleme se)“) nepatří do modlitby
-    if ($vysl['vstupni'] !== null) { $vysl['vstupni'] = trim(preg_replace('~^\([^)]*\)\s*~u', '', $vysl['vstupni'])); }
     $vysl['po_prijimani'] = sekceTextu($sekce, '~^Modlitba po přijímání~iu');
     // Vigilie: osm čtení (1.–7. a epištola) s žalmy a modlitbami; evangelium jako jinde
     if (!empty($prilezitost['vigilie'])) {
@@ -1031,6 +1093,9 @@ function nactiTexty(array $prilezitost, array $cfg): array
     if ($vyber['zalm'] ?? null) { $vysl['zalm'] = rozborZalmu($vyber['zalm']); }
     if ($vyber['verš'] ?? null) { $vysl['verš'] = rozborVerse($vyber['verš']); }
     if ($vyber['evangelium'] ?? null) { $vysl['evangelium'] = rozborCteni($vyber['evangelium']); }
+    // na webu zkrácené zakončení modlitby („Skrze tvého Syna …“) se doplní celé, ať ho není třeba dohledávat
+    if ($vysl['vstupni'] !== null) { $vysl['vstupni'] = doplnZakonceniModlitby($vysl['vstupni']); }
+    if ($vysl['po_prijimani'] !== null) { $vysl['po_prijimani'] = doplnZakonceniModlitby($vysl['po_prijimani']); }
     $kontrola = ['vstupni' => 'vstupní modlitba', 'po_prijimani' => 'modlitba po přijímání', 'cteni1' => '1. čtení', 'zalm' => 'žalm', 'verš' => 'verš před evangeliem', 'evangelium' => 'evangelium'];
     $spolecneTexty = false;
     foreach ($sekce as $s) { if (str_contains($s['nazev'], 'společných')) { $spolecneTexty = true; break; } }
@@ -1823,6 +1888,46 @@ HTML,
 </body>
 </html>
 HTML,
+
+        // pokyny, poznámky a druhá (nezvolená) varianta modlitby/čtení, jak je skutečně sází liturgie.cz:
+        // červené "O: Amen."/"Nebo:", třída "m" pro editorské poznámky a zkrácené zakončení "Skrze tvého Syna …"
+        'misal/03pust/00_07.htm' => <<<'HTML'
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>Pokyny a druhá varianta - testovací data</title>
+</head>
+<body>
+<h3>Testovací den s pokyny</h3>
+<h4>Vstupní modlitba</h4>
+<p class="red">(Neříká se <em>Modleme se</em>)</p>
+<p>Testovací vstupní modlitba, první varianta. Skrze tvého Syna ...<br>
+<span class="red">O:</span> Amen.</p>
+<p class="red">Nebo:</p>
+<p name="m" class="m">Poznámka, která se nemá číst.</p>
+<p>Testovací vstupní modlitba, druhá varianta, se nemá použít.</p>
+<h4>1. čtení – Test 3,1-2</h4>
+<p name="m" class="m">Poznámka před podtitulem čtení.</p>
+<p><em>Podtitul testovacího čtení s pokyny.</em></p>
+<p>Čtení z testovací knihy.</p>
+<p>Testovací čtení s pokynem na konci.</p>
+<p class="red">Pokyn, který nepatří do čtení.</p>
+<h4>Mezizpěv – Žl 1,1</h4>
+<p><em>Testovací refrén.</em></p>
+<p>Testovací sloka jedna.</p>
+<p><span class="red">Nebo: </span><em>Aleluja.</em></p>
+<p>Testovací sloka jiného žalmu, která se nemá použít.</p>
+<h4>Zpěv před evangeliem</h4>
+<p>Aleluja. Testovací verš. Aleluja.</p>
+<h4>Evangelium – Test 4,1-2</h4>
+<p>Slova svatého evangelia.</p>
+<p>Testovací evangelium.</p>
+<h4>Modlitba po přijímání</h4>
+<p>Testovací modlitba po přijímání. Neboť ty žiješ a kraluješ s Bohem Otcem v jednotě ...</p>
+</body>
+</html>
+HTML,
     ];
 }
 
@@ -2039,6 +2144,15 @@ jeRovno('advent: bez věty „Čte-li se“', str_contains($ta['cteni1']['text']
 jeRovno('advent: hlavní text 1. čtení', str_contains($ta['cteni1']['text'] ?? '', 'Testovací hlavní čtení'), true);
 jeRovno('advent: verš bez Aleluja', $ta['verš']['bez_aleluja'] ?? null, 'Testovací verš adventní.');
 jeRovno('advent: žalm a evangelium', [$ta['zalm']['citace'] ?? null, $ta['evangelium']['citace'] ?? null], ['Žl 122,1-2', 'Test 8,5-11']);
+// Pokyny, poznámky (třída „m“) a druhá varianta modlitby/čtení/žalmu se nevezmou; zkrácené zakončení se doplní
+$pp = ['nazev' => 'Testovací den s pokyny', 'odkaz' => ['slozka' => '03pust', 'soubor' => '00_07.htm'], 'hodnost' => 'ferie', 'obdobi' => 'pust', 'rok' => '', 'datum' => $d('2026-02-25')];
+$tp = nactiTexty($pp, $kc);
+jeRovno('pokyny: vstupní bez „(Neříká se)“ a bez druhé varianty', $tp['vstupni'],
+    'Testovací vstupní modlitba, první varianta. Skrze tvého Syna Ježíše Krista, našeho Pána, neboť on s tebou v jednotě Ducha svatého žije a kraluje po všechny věky věků.');
+jeRovno('pokyny: čtení bez poznámky před podtitulem a bez pokynu na konci', $tp['cteni1']['text'] ?? null, 'Testovací čtení s pokynem na konci.');
+jeRovno('pokyny: žalm bez druhé varianty za „Nebo:“', $tp['zalm']['sloky'] ?? null, ['Testovací sloka jedna.']);
+jeRovno('pokyny: modlitba po přijímání se zkráceným zakončením na Syna', $tp['po_prijimani'],
+    'Testovací modlitba po přijímání. Neboť ty žiješ a kraluješ s Bohem Otcem v jednotě Ducha svatého po všechny věky věků.');
 // Stránka všedního dne: bez vyznání a Gloria, s označením feriálního cyklu
 set_error_handler(function (int $no, string $str) { throw new ErrorException($str, 0, $no); });
 $hf = stranka($pf, $kc);
