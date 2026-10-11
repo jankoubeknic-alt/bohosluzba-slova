@@ -1398,6 +1398,23 @@ a.tlacitko { display: inline-block; border: 1px solid #000; padding: 1pt 6pt; te
 @media print { form.nastaveni { display: none; } .nezobrazovat { display: none; } body { padding: 0; max-width: none; } a { color: #000; text-decoration: none; } }
 CSS;
 
+// Datum poslední úpravy tohoto souboru – záložní údaj pro nasazení bez „.git“ (např. v Dockeru).
+// Aktualizuje se při každé větší úpravě generátoru.
+const BS_SESTAVENI = '2026-10-11';
+
+/** Verze generátoru pro hlavičku stránky (nezobrazuje se v tisku): commit z „.git“, jinak datum poslední úpravy. */
+function bsVerze(): string
+{
+    if (function_exists('shell_exec')) {
+        $git = @shell_exec('git -C ' . escapeshellarg(__DIR__) . ' log -1 --format=%h,%cd --date=short -- ' . escapeshellarg(basename(__FILE__)) . ' 2>/dev/null');
+        if (is_string($git) && trim($git) !== '' && str_contains($git, ',')) {
+            [$hash, $datum] = array_map('trim', explode(',', trim($git), 2));
+            if ($hash !== '' && $datum !== '') { return "commit $hash, $datum"; }
+        }
+    }
+    return 'sestavení ' . BS_SESTAVENI . ' (bez informace o commitu)';
+}
+
 function stranka(array $p, array $cfg, bool $web = false, ?array $upravy = null, ?string $formular = null): string
 {
     $t = uplatniUpravy(nactiTexty($p, $cfg), $upravy['texty'] ?? []);
@@ -1414,7 +1431,8 @@ function stranka(array $p, array $cfg, bool $web = false, ?array $upravy = null,
     }
     $zakladni = preg_match('~^https?://~', $cfg['zdroj']) ? rtrim($cfg['zdroj'], '/') . '/' : 'https://m.liturgie.cz/misal/';
     $nadpis = 'Bohoslužba slova ' . cesDatum($p['datum']);
-    $uvod = '<h1>' . h($nadpis) . '</h1>' . ($formular ?? '')
+    $uvod = '<p class="nezobrazovat" style="font-size:8pt;color:#888;margin:0 0 4pt;">Generátor – ' . h(bsVerze()) . '</p>'
+        . '<h1>' . h($nadpis) . '</h1>' . ($formular ?? '')
         . '<p class="legenda"><b>Misál:</b> <a href="' . h($zakladni) . '">' . h($zakladni) . '</a>, <b>kalendář:</b> <a href="' . h($zakladni . 'kalendar.htm') . '">' . h($zakladni . 'kalendar.htm') . '</a></p>'
         . ' ' . '<p class="legenda"><b>Zkratky:</b> <b>P</b> = předsedající (Vlasta nebo Honza, jsou-li přítomni, jinak jiný pověřený), <b>Ž</b> = žalmista (Honza nebo varhanice Lenka), <b>L</b> = lektor, <b>Vš</b> = všichni. Kurzívou jsou řádky, které se nečtou nahlas (pokyny a poznámky). Varianta A platí, když nejsou přítomni ani Vlasta, ani Honza; varianta B, když vede Vlasta nebo Honza.</p>';
     return "<!doctype html>\n<html lang=\"cs\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>" . h($nadpis) . "</title>\n<style>" . CSS . "</style>\n</head>\n<body>\n$uvod\n"
