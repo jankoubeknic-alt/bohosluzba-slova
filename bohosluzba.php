@@ -934,6 +934,9 @@ function rozborCteni(array $s): array
     foreach ($radky as $i => $r) { if (preg_match('~^Čte-li se~u', $r['t'])) { $radky = array_slice($radky, 0, $i); break; } }
     $citace = citaceZNadpisu($s['nazev']);
     if ($citace === '' && $radky && jePasazCitace($radky[0]['t'])) { $citace = array_shift($radky)['t']; }
+    // podtitulek (kurzívou, např. „Vzpomínáme na vaši víru, lásku a naději.“) nepatří do čteného textu;
+    // na webu někdy chybí věta „Čtení z ...“, po které se jinak odstraňuje, takže se strhne i bez ní
+    while ($radky && !empty(reset($radky)['kurziva'])) { array_shift($radky); }
     $uvod = '';
     foreach ($radky as $i => $r) {
         if (preg_match('~^(Čtení|Slova svatého evangelia|Začátek|Pokračování|Z knihy|Z listu)~u', $r['t'])) {
@@ -1173,19 +1176,21 @@ function vlastni(?string $text, string $zastupny): string
 function radkySlova(array $p, array $t): array
 {
     $r = [];
-    $cteni = function (string $klic, string $cislo, string $uvodZastupny) use (&$r, $t) {
+    $cteni = function (string $klic, string $cislo) use (&$r, $t) {
         $c = $t[$klic] ?? null;
         $r[] = ['pokyn', "$cislo čtení." . ($c && $c['citace'] ? ' (' . $c['citace'] . ')' : '')];
-        $r[] = ['L', $c && $c['uvod'] ? $c['uvod'] : $uvodZastupny];
+        // na webu občas chybí úvodní věta („Čtení z knihy ...“); citace je v pokynu výše, ale samo „Čtení z ...“
+        // by znělo jako hotový text, proto zůstává jako zřetelně označený doplněk
+        $r[] = ['L', $c && $c['uvod'] ? $c['uvod'] : vlastni(null, 'ÚVODNÍ VĚTA ČTENÍ – na webu chybí, doplňte podle citace výše.')];
         $r[] = ['L', vlastni($c['text'] ?? null, "VLASTNÍ TEXT - $cislo ČTENÍ.")];
         $r[] = ['L', 'Slyšeli jsme slovo Boží.'];
         $r[] = ['Vš', 'Bohu díky.'];
     };
-    $cteni('cteni1', '1.', 'Čtení z ...');
+    $cteni('cteni1', '1.');
 
     $r = array_merge($r, radkyZalmu($t['zalm'] ?? null, $t['zalm']['citace'] ?? ''));
 
-    if (!empty($t['cteni2'])) { $cteni('cteni2', '2.', 'Čtení z ...'); }
+    if (!empty($t['cteni2'])) { $cteni('cteni2', '2.'); }
 
     $v = $t['verš'] ?? null;
     if ($p['obdobi'] === 'pust') {
@@ -1225,13 +1230,26 @@ function radkyZalmu(?array $zalm, string $citace): array
     return $r;
 }
 
+/** Chybí-li na webu věta „Slova svatého evangelia podle ...“, dá se bezpečně odvodit ze zkratky v citaci. */
+function evangeliumPodle(string $citace): string
+{
+    $podle = match (true) {
+        (bool)preg_match('~^Mt\b~u', $citace) => 'Matouše',
+        (bool)preg_match('~^Mk\b~u', $citace) => 'Marka',
+        (bool)preg_match('~^Lk\b~u', $citace) => 'Lukáše',
+        (bool)preg_match('~^Jan\b~u', $citace) => 'Jana',
+        default => null,
+    };
+    return $podle !== null ? "Slova svatého evangelia podle $podle." : 'Slova svatého evangelia podle ...';
+}
+
 /** Evangelium a homilie (společné pro běžnou bohoslužbu slova i vigilii). */
 function radkyEvangelium(array $t): array
 {
     $e = $t['evangelium'] ?? null;
     return [
         ['pokyn', 'Evangelium. Stojí. Bez „Pán s vámi“, bez kadidla a bez kříže nad knihou.' . ($e && $e['citace'] ? ' (' . $e['citace'] . ')' : '')],
-        ['P', $e && $e['uvod'] ? $e['uvod'] : 'Slova svatého evangelia podle ...'],
+        ['P', $e && $e['uvod'] ? $e['uvod'] : evangeliumPodle($e['citace'] ?? '')],
         ['Vš', 'Sláva tobě, Pane.'],
         ['P', vlastni($e['text'] ?? null, 'VLASTNÍ TEXT - EVANGELIUM.')],
         ['P', 'Slyšeli jsme slovo Boží.'],
@@ -1249,7 +1267,7 @@ function radkyVigilie(array $t): array
     foreach ($t['cteni_vigilie'] ?? [] as $i => $c) {
         $vedle = $cisla[$i] ?? 'Epištola';
         $r[] = ['pokyn', ($i < 7 ? "$vedle čtení." : 'Epištola.') . ($c['citace'] ? ' (' . $c['citace'] . ')' : '')];
-        $r[] = ['L', $c['uvod'] ?: 'Čtení z ...'];
+        $r[] = ['L', $c['uvod'] ?: vlastni(null, 'ÚVODNÍ VĚTA ČTENÍ – na webu chybí, doplňte podle citace výše.')];
         $r[] = ['L', vlastni($c['text'] ?? null, 'VLASTNÍ TEXT - ' . ($i < 7 ? "$vedle ČTENÍ" : 'EPIŠTOLA') . '.')];
         $r[] = ['L', 'Slyšeli jsme slovo Boží.'];
         $r[] = ['Vš', 'Bohu díky.'];
@@ -2199,6 +2217,15 @@ jeRovno('ferie: stránka s feriálním cyklem', str_contains($hf, 'feriální cy
     jeRovno('kantikum vypíše refrén a sloky', radkyZalmu(['citace' => 'Lk 1,46-55', 'refren' => 'Refrén.', 'sloky' => ['Sloka jedna.']], 'Lk 1,46-55'),
         [['pokyn', 'Kantikum (Lk 1,46-55). Zpívá Honza nebo varhanice Lenka. Lid sedí.'], ['Vš', 'Refrén.'], ['Ž', 'Sloka jedna.']]);
     jeRovno('žalm s číslem jde na Korejs', radkyZalmu(['refren' => 'R', 'sloky' => []], 'Žl 80 (79), 9+12'), [['pokyn', 'Žalm. Zpívá Honza nebo varhanice Lenka. Lid sedí. (Žl 80 (79)) – text a nápěv v Korejsovi.']]);
+    // chybí-li na webu „Slova svatého evangelia podle ...“, odvodí se ze zkratky v citaci
+    jeRovno('evangelium podle: odvodí se z citace', evangeliumPodle('Mk 6,1-6'), 'Slova svatého evangelia podle Marka.');
+    jeRovno('evangelium podle: neznámá zkratka', evangeliumPodle('Sk 1,1-5'), 'Slova svatého evangelia podle ...');
+    // podtitulek (kurzívou) se strhne, i když na webu chybí věta „Čtení z ...“/„Slova svatého evangelia podle ...“
+    $sBezUvodu = ['nazev' => '2. čtení – Test 9,1-2', 'uroven' => 4, 'radky' => [
+        ['t' => 'Podtitulek bez úvodní věty.', 'kurziva' => true, 'poznamka' => false, 'odst' => 0],
+        ['t' => 'Hlavní text čtení bez úvodní věty.', 'kurziva' => false, 'poznamka' => false, 'odst' => 1],
+    ]];
+    jeRovno('čtení bez „Čtení z ...“: podtitulek se strhne', rozborCteni($sBezUvodu), ['citace' => 'Test 9,1-2', 'uvod' => '', 'text' => 'Hlavní text čtení bez úvodní věty.']);
     echo "Hotovo: $ok v pořádku, $chyb chyb.\n";
     return $chyb ? 1 : 0;
 }
