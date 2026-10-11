@@ -6,7 +6,7 @@ Celý generátor je **jediný soubor `bohosluzba.php`** včetně vestavěných t
 
 ## Spuštění
 - **Web:** nahrajte `bohosluzba.php` na PHP hosting (PHP 8.1+ s rozšířeními dom a curl nebo allow_url_fopen; složka `cache/` musí být zapisovatelná). Den vyberete v kalendáři ve formuláři nahoře; přepínače jsou v NASTAVENÍ na začátku souboru a také ve formuláři.
-  - `bohosluzba.php` – výchozí den: nejbližší den s bohoslužbou od zítřka
+  - `bohosluzba.php` – výchozí den: dnešní neděle, je-li dnes neděle, jinak následující neděle
   - `bohosluzba.php?den=2026-10-18` – konkrétní den
   - `bohosluzba.php?den=2026-11-02&zformular=2` – vzpomínka na zemřelé s 2. formulářem
 - **Příkazová řádka:** `php bohosluzba.php --den=2026-10-18 --vystup=bohosluzba.html` (přepínač `--zformular=1|2|3` a ostatní nastavení jako ve formuláři).
@@ -56,7 +56,7 @@ Celý generátor je **jediný soubor `bohosluzba.php`** včetně vestavěných t
 - `slavnosti_ve_vsedni_den` – nabízet slavnosti a svátky ve všední den.
 - `svatky_ve_vsedni_den` – seznam měsíc-den slavností a svátků, které se nabízejí ve všední den. Co nechcete, smažte.
 - `vzpominky` – `'povinne'` (výchozí) nebo `'vsechny'` (i nepovinné památky).
-- `vcetne_dnes` – výchozí den bez data je následující neděle; `true` počítá i s dnešní nedělí, je-li dnes neděle.
+- `vcetne_dnes` – výchozí den bez data (výchozí `true`): dnešní neděle, je-li dnes neděle, jinak následující; `false` je vždy následující neděle, i když je dnes neděle.
 - `zesnuli_formular` – 1, 2 nebo 3 pro vzpomínku na zemřelé.
 
 ## Upozornění

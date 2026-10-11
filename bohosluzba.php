@@ -34,7 +34,7 @@ $CFG = [
     // Památky svatých ve všední den: 'povinne' = jen povinné (mají texty na liturgie.cz), 'vsechny' i nepovinné (jen pokud mají stránku)
     'vzpominky' => 'povinne',
     'zesnuli_formular' => 1,                 // vzpomínka na zemřelé (2. 11.) má 3 mešní formuláře: 1, 2 nebo 3 (vstupní a po přijímání)
-    'vcetne_dnes' => false,                  // výchozí den bez data: false = následující neděle (po dnešku), true = dnešní neděle, je-li dnes neděle
+    'vcetne_dnes' => true,                   // výchozí den bez data: true = dnešní neděle, je-li dnes neděle (jinak následující), false = vždy následující neděle
     'casove_pasmo' => 'Europe/Prague',
 ];
 // =========================================================
